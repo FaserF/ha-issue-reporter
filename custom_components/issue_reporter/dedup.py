@@ -210,16 +210,53 @@ async def async_check_github_duplicate(
     if not target.owner_matched and CONF_COMMENT_ON_NEWER_VERSION not in config:
         comment_allowed = False
 
-    # Stage 1: Exact reporter fingerprint search
-    exact_items = await github.async_search_issues(
-        owner, repo, f'"{FINGERPRINT_PREFIX}{fingerprint}"', per_page=5
+    # Stage 0: ETag-cached local repository issue index (avoids 30 req/min Search API!)
+    fp_marker = f"{FINGERPRINT_PREFIX}{fingerprint}"
+    local_issues, may_have_more = await github.async_get_repo_issues(owner, repo)
+
+    best_match: dict[str, Any] | None = None
+    best_sim = 0.0
+    for item in local_issues:
+        if fp_marker in str(item.get("body") or ""):
+            best_match = item
+            best_sim = 1.0
+            break
+
+    query_blob = (
+        f"{target.short_name if target.is_monorepo else ''} "
+        f"{event.exception_type} {event.message}"
     )
+    if best_match is None and local_issues:
+        for item in local_issues:
+            cand_title = str(item.get("title") or "")
+            cand_body = str(item.get("body") or "")[:1500]
+            if (
+                target.is_monorepo
+                and target.short_name.lower()
+                not in (cand_title + " " + cand_body).lower()
+            ):
+                continue
+            sim = max(
+                _combined_similarity(event.message, cand_title),
+                _combined_similarity(query_blob, f"{cand_title} {cand_body}"),
+            )
+            if sim > best_sim:
+                best_sim = sim
+                best_match = item
+        if best_sim < threshold:
+            best_match = None
 
-    best_match: dict[str, Any] | None = exact_items[0] if exact_items else None
-    best_sim = 1.0 if exact_items else 0.0
+    # Stage 1: Exact reporter fingerprint search (only if repo has >100 issues)
+    if best_match is None and may_have_more:
+        exact_items = await github.async_search_issues(
+            owner, repo, f'"{fp_marker}"', per_page=5
+        )
+        if exact_items:
+            best_match = exact_items[0]
+            best_sim = 1.0
 
-    # Stage 2: Cross-user fuzzy search (catches issues filed manually by humans!)
-    if best_match is None:
+    # Stage 2: Cross-user fuzzy search (only if repo has >100 issues and no local match)
+    if best_match is None and may_have_more:
         search_terms: list[str] = []
         if target.is_monorepo:
             search_terms.append(target.short_name)
@@ -232,7 +269,6 @@ async def async_check_github_duplicate(
             candidates = await github.async_search_issues(
                 owner, repo, query, per_page=15
             )
-            query_blob = f"{target.short_name if target.is_monorepo else ''} {event.exception_type} {event.message}"
             for item in candidates:
                 if "pull_request" in item:
                     continue

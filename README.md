@@ -7,6 +7,10 @@
 
 A **Spook-inspired Home Assistant helper integration** that monitors custom integration logs and Supervisor add-on logs with minimal overhead, filters out local/transient errors, masks sensitive secrets & PII across 4 security layers, deduplicates across existing GitHub issues with version intelligence, and automatically fills target repositories' GitHub Issue Templates.
 
+> [!NOTE]
+> **Target Audience — Integration & Add-on Developers:**
+> Issue Reporter is primarily designed for **Home Assistant integration and add-on developers** to automatically monitor their own repositories, `-dev` / `#edge` builds, and test/staging instances. While end-users can use it in **Dry-Run** or **Approval** mode, automated issue submission should be restricted to repositories you maintain or actively test.
+
 ---
 
 ## Features

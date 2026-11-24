@@ -21,7 +21,6 @@ from .auth import (
     GitHubAuthError,
     GitHubAuthManager,
     GitHubReauthRequiredError,
-    RepoNotAuthorizedError,
 )
 from .const import (
     CONF_ADDON_POLL_MINUTES,
@@ -41,7 +40,6 @@ from .const import (
     DOMAIN,
     LOGGER,
     MODE_APPROVAL,
-    MODE_AUTO,
     MODE_DRY_RUN,
     SEVERITY_LEVELS,
     TARGET_INTEGRATION,
@@ -57,7 +55,8 @@ from .discovery import (
     async_discover_integrations,
 )
 from .filters import ErrorFilter
-from .github_client import GitHubAPIError, GitHubClient
+from .github_client import GitHubClient
+from .github_types import GitHubNetworkError, GitHubRateLimitError
 from .log_monitor import (
     IN_REPORTER_PIPELINE,
     IntegrationLogHandler,
@@ -74,6 +73,11 @@ from .repairs import (
     async_raise_leak_guard_repair,
 )
 from .state_store import ReporterStateStore
+from .submission import (
+    async_flush_retry_queue,
+    async_handle_open_comment,
+    async_submit_issue,
+)
 from .template_engine import IssueTemplateEngine
 
 
@@ -106,6 +110,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._log_handler = IntegrationLogHandler(hass.loop, self._schedule_log_drain)
         self._drain_task: asyncio.Task[None] | None = None
         self._process_lock = asyncio.Lock()
+        self._in_flight_fps: set[str] = set()
         self._unsub_dispatcher: CALLBACK_TYPE | None = None
         self._handler_attached = False
         self._last_discovery_at: datetime | None = None
@@ -251,6 +256,9 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._async_process_event(ev)
 
         await self._async_drain_log_queue()
+        await async_flush_retry_queue(self)
+        self.stats.api_circuit_open = self.github.is_circuit_open
+        self.stats.retry_queue_size = len(self.store.retry_queue)
         self.stats.last_scan_at = now.isoformat()
         self.store.dirty = True
         await self.store.async_save()
@@ -284,6 +292,9 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return "target_disabled"
         if event.levelno < self._target_min_levelno(target):
             return "below_severity"
+        if self.store.is_target_flood_paused(target.target_key):
+            self.stats.rate_limited_suppressed += 1
+            return "flood_paused"
 
         ignored, _ = self.error_filter.should_ignore(event)
         if ignored:
@@ -307,10 +318,44 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
         fp = compute_fingerprint(target, sanitized_event)
-        if fp in self.store.dismissed_fps or self.store.is_in_cooldown(fp):
+        if (
+            fp in self._in_flight_fps
+            or fp in self.store.dismissed_fps
+            or fp in self.store.retry_queue
+            or self.store.is_in_cooldown(fp)
+        ):
             self.stats.duplicates_suppressed += 1
             self.store.dirty = True
             return "cooldown"
+
+        self._in_flight_fps.add(fp)
+        try:
+            return await self._async_process_unique_event(
+                target,
+                sanitized_event,
+                msg_res.text,
+                tb_res.text,
+                fp,
+            )
+        finally:
+            self._in_flight_fps.discard(fp)
+
+    async def _async_process_unique_event(
+        self,
+        target: TargetInfo,
+        sanitized_event: LogEvent,
+        sanitized_msg: str,
+        sanitized_tb: str,
+        fp: str,
+    ) -> str:
+        """Process a non-duplicate event through thresholds, dedup, guard, and routing."""
+        assert target.full_repo is not None
+        if self.store.record_target_unique_event(target.target_key, fp):
+            LOGGER.warning(
+                "Anti-flood breaker paused %s for 60m after burst of unique errors",
+                target.target_key,
+            )
+            return "flood_paused"
 
         occurrences, first_seen, last_seen = self.store.record_occurrence(fp)
         threshold = (
@@ -319,7 +364,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     CONF_MIN_OCCURRENCES_WARNING, DEFAULT_MIN_OCCURRENCES_WARNING
                 )
             )
-            if event.levelno < 40
+            if sanitized_event.levelno < 40
             else int(
                 self.config.get(
                     CONF_MIN_OCCURRENCES_ERROR, DEFAULT_MIN_OCCURRENCES_ERROR
@@ -354,9 +399,15 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.store.set_cooldown(fp)
                 return "outdated"
 
-        dup = await async_check_github_duplicate(
-            self.github, target, sanitized_event, fp, self.config
-        )
+        try:
+            dup = await async_check_github_duplicate(
+                self.github, target, sanitized_event, fp, self.config
+            )
+        except (GitHubRateLimitError, GitHubNetworkError) as err:
+            self.stats.last_error = str(err)
+            LOGGER.debug("Deferred dedup check for %s: %s", target.target_key, err)
+            return "github_deferred"
+
         effective_mode = (
             MODE_DRY_RUN
             if bool(self.config.get(CONF_DRY_RUN, DEFAULT_DRY_RUN))
@@ -369,16 +420,16 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return dup.action
 
         if dup.action == "comment_open" and dup.issue_number and dup.comment_body:
-            return await self._async_handle_open_comment(
-                target, fp, dup.issue_number, dup.comment_body, effective_mode
+            return await async_handle_open_comment(
+                self, target, fp, dup.issue_number, dup.comment_body, effective_mode
             )
 
         rendered = await self.template_engine.async_render_issue(
             self.hass,
             target,
             sanitized_event,
-            sanitized_message=msg_res.text,
-            sanitized_traceback=tb_res.text,
+            sanitized_message=sanitized_msg,
+            sanitized_traceback=sanitized_tb,
             fingerprint=fp,
             occurrences=occurrences,
             first_seen=first_seen,
@@ -409,7 +460,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 body=rendered.body,
                 labels=rendered.labels,
                 fingerprint=fp,
-                severity=event.severity,
+                severity=sanitized_event.severity,
                 version=target.version,
                 created_at=datetime.now(UTC).isoformat(),
                 occurrences=occurrences,
@@ -424,74 +475,14 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     draft.repo,
                     draft.title,
                     draft.target_name,
-                    msg_res.text,
+                    sanitized_msg,
                 )
             self.store.set_cooldown(fp)
             return (
                 "dry_run_draft" if effective_mode == MODE_DRY_RUN else "approval_queued"
             )
 
-        return await self._async_submit_issue(target, rendered, fp)
-
-    async def _async_handle_open_comment(
-        self, target: TargetInfo, fp: str, issue_num: int, raw_comment: str, mode: str
-    ) -> str:
-        """Handle posting a newer-version comment on an existing open issue."""
-        if mode != MODE_AUTO or not target.repo_owner or not target.repo_name:
-            self.stats.duplicates_suppressed += 1
-            self.store.set_cooldown(fp)
-            return "comment_skipped_dry_run"
-
-        comment_res = self.redactor.redact(raw_comment)
-        safe, reasons = self.redactor.verify_no_leaks("", comment_res.text)
-        if not safe:
-            self.stats.leak_guard_blocks += 1
-            async_raise_leak_guard_repair(self.hass, target.name, reasons)
-            return "leak_guard_blocked"
-        try:
-            await self.github.async_create_comment(
-                target.repo_owner, target.repo_name, issue_num, comment_res.text
-            )
-            self.stats.comments_posted += 1
-            self.store.set_cooldown(fp)
-            return "commented"
-        except RepoNotAuthorizedError:
-            return "not_authorized"
-        except GitHubAPIError as err:
-            LOGGER.warning("Failed posting version comment: %s", err)
-            return "github_error"
-
-    async def _async_submit_issue(
-        self, target: TargetInfo, rendered: Any, fp: str
-    ) -> str:
-        """Submit rendered issue to GitHub with safe auth/API error handling."""
-        if not target.repo_owner or not target.repo_name:
-            return "missing_repo"
-        try:
-            created = await self.github.async_create_issue(
-                target.repo_owner,
-                target.repo_name,
-                rendered.title,
-                rendered.body,
-                labels=rendered.labels,
-            )
-        except RepoNotAuthorizedError as err:
-            LOGGER.info("Skipping %s: %s", rendered.repo, err)
-            return "not_authorized"
-        except GitHubReauthRequiredError as err:
-            self.stats.last_error = str(err)
-            self.entry.async_start_reauth(self.hass)
-            return "reauth_required"
-        except GitHubAPIError as err:
-            self.stats.last_error = str(err)
-            LOGGER.warning("Failed creating issue on %s: %s", rendered.repo, err)
-            return "github_error"
-
-        self.stats.issues_created += 1
-        self.stats.last_issue_url = str(created.get("html_url") or "") or None
-        self.store.set_cooldown(fp)
-        self.store.record_post_rate(rendered.repo)
-        return "created"
+        return await async_submit_issue(self, target, rendered, fp)
 
     async def async_approve_draft(self, draft_id: str) -> dict[str, Any]:
         """Re-verify Layer 4 Leak Guard, publish draft to GitHub, and clear Repair."""

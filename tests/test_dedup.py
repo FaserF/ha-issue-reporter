@@ -99,17 +99,23 @@ async def test_duplicate_detection_exact_fuzzy_comment_and_regression() -> None:
     fp = compute_fingerprint(t, ev)
 
     github = MagicMock()
-    # 1. Exact fingerprint open match -> comment_open since 2.5.8 > 2.5.6
+    # 0. Local issue index exact match avoids Search API completely
+    github.async_get_repo_issues = AsyncMock(
+        return_value=(
+            [
+                {
+                    "number": 42,
+                    "html_url": "https://github.com/FaserF/ha-openwrt/issues/42",
+                    "state": "open",
+                    "title": "[Bug]: KeyError lan_rx_bytes",
+                    "body": f"Version v2.5.6 <!-- {FINGERPRINT_PREFIX}{fp} -->",
+                }
+            ],
+            False,
+        )
+    )
     github.async_search_issues = AsyncMock(
-        return_value=[
-            {
-                "number": 42,
-                "html_url": "https://github.com/FaserF/ha-openwrt/issues/42",
-                "state": "open",
-                "title": "[Bug]: KeyError lan_rx_bytes",
-                "body": f"Version v2.5.6 <!-- {FINGERPRINT_PREFIX}{fp} -->",
-            }
-        ]
+        side_effect=AssertionError("Should not hit Search API")
     )
     github.async_get_issue_comments = AsyncMock(return_value=[])
     res1 = await async_check_github_duplicate(
@@ -135,7 +141,8 @@ async def test_duplicate_detection_exact_fuzzy_comment_and_regression() -> None:
     )
     assert res_dup_comment.action == "skip_open"
 
-    # 2. Cross-user fuzzy match on human-filed open issue -> skip_open when comment disabled
+    # 2. Cross-user fuzzy match via Search API fallback when repo has >100 issues
+    github.async_get_repo_issues = AsyncMock(return_value=([], True))
     github.async_search_issues = AsyncMock(
         side_effect=[
             [],  # exact search empty

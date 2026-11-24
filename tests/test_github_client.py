@@ -159,3 +159,69 @@ async def test_github_client_metadata_templates_and_label_retry() -> None:
 
     comment = await client.async_create_comment("FaserF", "ha-openwrt", 99, "Note")
     assert comment["id"] == 1
+
+
+async def test_github_client_etag_304_and_proactive_rate_limit() -> None:
+    """Test ETag 304 zero-quota refresh, stale fallback, and proactive rate-limit block."""
+    from datetime import UTC, datetime, timedelta
+
+    import pytest
+
+    from custom_components.issue_reporter.github_types import GitHubRateLimitError
+
+    session = _MockClientSession(
+        [
+            (
+                "GET",
+                "/repos/FaserF/ha-openwrt/issues",
+                _ClientMockResp(
+                    [{"number": 1, "title": "Bug"}],
+                    headers={
+                        "ETag": '"abc123"',
+                        "X-RateLimit-Remaining": "4980",
+                        "X-RateLimit-Reset": "1800000000",
+                    },
+                ),
+            ),
+            (
+                "GET",
+                "/repos/FaserF/ha-openwrt/issues",
+                _ClientMockResp(
+                    None,
+                    status=304,
+                    headers={
+                        "ETag": '"abc123"',
+                        "X-RateLimit-Remaining": "4980",
+                        "X-RateLimit-Reset": "1800000000",
+                    },
+                ),
+            ),
+        ]
+    )
+    auth = GitHubAuthManager(
+        session,  # type: ignore[arg-type]
+        {
+            CONF_AUTH_METHOD: AUTH_PAT,
+            CONF_GITHUB_TOKEN: "ghp_tok",
+            CONF_GITHUB_USER: "FaserF",
+        },
+    )
+    client = GitHubClient(session, auth)  # type: ignore[arg-type]
+
+    issues, more = await client.async_get_repo_issues("FaserF", "ha-openwrt")
+    assert len(issues) == 1 and more is False
+
+    # Force cache expiry -> triggers If-None-Match -> 304 Not Modified keeps cached issues
+    client._issues_cache["faserf/ha-openwrt"].fetched_at = datetime.now(
+        UTC
+    ) - timedelta(hours=1)
+    issues2, _ = await client.async_get_repo_issues("FaserF", "ha-openwrt")
+    assert len(issues2) == 1
+
+    # Proactive rate limit blocks new uncached request when remaining < reserve
+    client.rate_limit_remaining = 5
+    client.rate_limit_reset = int(
+        (datetime.now(UTC) + timedelta(minutes=10)).timestamp()
+    )
+    with pytest.raises(GitHubRateLimitError):
+        await client.async_create_issue("FaserF", "ha-openwrt", "T", "B")

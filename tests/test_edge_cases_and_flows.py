@@ -314,3 +314,104 @@ async def test_device_flow_and_remaining_options_steps(hass) -> None:
             a1["flow_id"], {CONF_GITHUB_TOKEN: "ghp_rotated", "fallback_token": ""}
         )
     assert a_done["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_retry_outbox_and_flood_breaker(
+    hass,
+    mock_custom_components,
+    mock_supervisor_client,
+) -> None:
+    """Test fallback retry outbox on network failure + flush, and anti-flood breaker."""
+    from datetime import UTC, datetime, timedelta
+
+    from custom_components.issue_reporter.github_types import GitHubNetworkError
+    from custom_components.issue_reporter.submission import async_flush_retry_queue
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        data={
+            CONF_AUTH_METHOD: AUTH_PAT,
+            CONF_GITHUB_TOKEN: "ghp_test",
+            CONF_GITHUB_USER: "FaserF",
+        },
+        options={CONF_OWNER_FILTER_MODE: OWNER_FILTER_SELF, CONF_DRY_RUN: False},
+    )
+    entry.add_to_hass(hass)
+    with (
+        patch(
+            "custom_components.issue_reporter.discovery.async_get_custom_components",
+            return_value=mock_custom_components,
+        ),
+        patch(
+            "custom_components.issue_reporter.auth.GitHubAuthManager.async_initialize",
+            return_value=None,
+        ),
+        patch(
+            "custom_components.issue_reporter.discovery.is_hassio", return_value=True
+        ),
+        patch(
+            "custom_components.issue_reporter.discovery.get_supervisor_client",
+            return_value=mock_supervisor_client,
+        ),
+        patch(
+            "custom_components.issue_reporter.coordinator.is_hassio", return_value=False
+        ),
+        patch(
+            "custom_components.issue_reporter.coordinator.async_fetch_core_logs",
+            return_value=[],
+        ),
+        patch(
+            "custom_components.issue_reporter.github_client.GitHubClient.async_get_repo_info",
+            return_value={"has_issues": True, "archived": False, "disabled": False},
+        ),
+        patch(
+            "custom_components.issue_reporter.github_client.GitHubClient.async_get_latest_release",
+            return_value="v2.5.7",
+        ),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    coord = entry.runtime_data
+    coord.targets["integration:openwrt"].mode = "auto"
+    coord.github.async_get_latest_release = AsyncMock(return_value="v2.5.7")
+    coord.github.async_get_repo_issues = AsyncMock(return_value=([], False))
+    coord.github.async_fetch_bug_templates = AsyncMock(return_value=[])
+    coord.github.async_create_issue = AsyncMock(
+        side_effect=GitHubNetworkError("Temporary DNS outage")
+    )
+
+    ev = LogEvent(
+        target_key="integration:openwrt",
+        kind="integration",
+        logger_name="custom_components.openwrt",
+        severity="ERROR",
+        levelno=40,
+        message="Transient failure should buffer",
+        exception_type="RuntimeError",
+    )
+    assert await coord._async_process_event(ev) == "queued_retry"
+    assert len(coord.store.retry_queue) == 1
+
+    # Make retry due and recover network -> flush delivers the buffered issue
+    for item in coord.store.retry_queue.values():
+        item.next_retry_at = (datetime.now(UTC) - timedelta(seconds=5)).isoformat()
+    coord.github.async_create_issue = AsyncMock(
+        return_value={
+            "number": 200,
+            "html_url": "https://github.com/FaserF/ha-openwrt/issues/200",
+        }
+    )
+    await async_flush_retry_queue(coord)
+    assert len(coord.store.retry_queue) == 0
+    assert coord.stats.issues_created == 1
+
+    # Anti-flood breaker pauses target after 5 unique errors in 10 minutes
+    for idx in range(5):
+        tripped = coord.store.record_target_unique_event(
+            "integration:openwrt", f"fp_{idx}"
+        )
+    assert tripped is True
+    assert coord.store.is_target_flood_paused("integration:openwrt") is True
+    await hass.config_entries.async_unload(entry.entry_id)

@@ -143,6 +143,7 @@ async def test_full_pipeline_sensors_services_diagnostics_and_health(
 
     # 2. Mock GitHub client for preview & auto-create pipeline
     coord.github.async_get_latest_release = AsyncMock(return_value="v2.5.7")
+    coord.github.async_get_repo_issues = AsyncMock(return_value=([], False))
     coord.github.async_search_issues = AsyncMock(return_value=[])
     coord.github.async_fetch_bug_templates = AsyncMock(
         return_value=[

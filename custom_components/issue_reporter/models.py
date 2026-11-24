@@ -183,6 +183,66 @@ class PendingDraft:
 
 
 @dataclass
+class QueuedSubmission:
+    """Buffered GitHub issue or comment awaiting retry after network/rate-limit error."""
+
+    queue_id: str
+    kind: str  # "issue" | "comment"
+    target_key: str
+    repo: str
+    fingerprint: str
+    title: str
+    body: str
+    labels: list[str] = field(default_factory=list)
+    issue_number: int | None = None
+    created_at: str = ""
+    next_retry_at: str = ""
+    attempts: int = 0
+    last_error: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize queued submission for persistent storage."""
+        return {
+            "queue_id": self.queue_id,
+            "kind": self.kind,
+            "target_key": self.target_key,
+            "repo": self.repo,
+            "fingerprint": self.fingerprint,
+            "title": self.title,
+            "body": self.body,
+            "labels": list(self.labels),
+            "issue_number": self.issue_number,
+            "created_at": self.created_at,
+            "next_retry_at": self.next_retry_at,
+            "attempts": self.attempts,
+            "last_error": self.last_error,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> QueuedSubmission:
+        """Deserialize queued submission from persistent storage."""
+        return cls(
+            queue_id=str(data["queue_id"]),
+            kind=str(data.get("kind", "issue")),
+            target_key=str(data.get("target_key", "")),
+            repo=str(data["repo"]),
+            fingerprint=str(data["fingerprint"]),
+            title=str(data.get("title", "")),
+            body=str(data.get("body", "")),
+            labels=list(data.get("labels") or []),
+            issue_number=(
+                int(data["issue_number"])
+                if data.get("issue_number") is not None
+                else None
+            ),
+            created_at=str(data.get("created_at", "")),
+            next_retry_at=str(data.get("next_retry_at", "")),
+            attempts=int(data.get("attempts", 0)),
+            last_error=str(data.get("last_error", "")),
+        )
+
+
+@dataclass
 class ReporterStats:
     """Operational metrics exposed via diagnostic sensors & system health."""
 
@@ -193,6 +253,8 @@ class ReporterStats:
     filtered_local: int = 0
     rate_limited_suppressed: int = 0
     leak_guard_blocks: int = 0
+    retry_queue_size: int = 0
+    api_circuit_open: bool = False
     last_issue_url: str | None = None
     last_scan_at: str | None = None
     last_error: str | None = None
