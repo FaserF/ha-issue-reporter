@@ -1,0 +1,84 @@
+rules:
+  # Bronze
+  action-setup: done
+  appropriate-polling: done
+  brands:
+    status: exempt
+    comment: Brand icons are maintained separately in the home-assistant/brands repository upon release.
+  common-modules: done
+  config-flow: done
+  config-flow-test-coverage: done
+  dependency-transparency: done
+  docs-actions: done
+  docs-conditions:
+    status: exempt
+    comment: The integration provides no custom automation conditions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-triggers:
+    status: exempt
+    comment: The integration provides no custom automation triggers.
+  entity-event-setup:
+    status: exempt
+    comment: Entities subscribe to DataUpdateCoordinator updates rather than raw bus events.
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery:
+    status: exempt
+    comment: Issue Reporter monitors local integrations and Supervisor add-ons dynamically at runtime; it has no network discovery protocol.
+  discovery-update-info:
+    status: exempt
+    comment: Target metadata is refreshed on demand and on coordinator intervals without mDNS/SSDP discovery.
+  docs-data-update: done
+  docs-examples: done
+  docs-known-limitations: done
+  docs-supported-devices:
+    status: exempt
+    comment: Issue Reporter is a service integration and does not manage physical devices.
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: done
+  dynamic-devices:
+    status: exempt
+    comment: Issue Reporter exposes a single hub service device with minimal status entities by design.
+  entity-category: done
+  entity-device-class:
+    status: exempt
+    comment: Reported counts and API quota sensors represent unitless operational counters.
+  entity-disabled-by-default: done
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow:
+    status: exempt
+    comment: Reconfiguration of credentials, filters, and target policies is handled by OptionsFlow and ReauthFlow.
+  repair-issues: done
+  stale-devices:
+    status: exempt
+    comment: Only one static service device is created for the config entry.
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing: done

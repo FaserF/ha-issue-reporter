@@ -1,0 +1,44 @@
+{
+  "entity": {
+    "sensor": {
+      "monitored_targets": {
+        "default": "mdi:radar"
+      },
+      "pending_drafts": {
+        "default": "mdi:email-alert-outline"
+      },
+      "issues_created": {
+        "default": "mdi:github"
+      },
+      "duplicates_suppressed": {
+        "default": "mdi:filter-check-outline"
+      },
+      "leak_guard_blocks": {
+        "default": "mdi:shield-lock"
+      },
+      "github_api_remaining": {
+        "default": "mdi:gauge"
+      }
+    }
+  },
+  "services": {
+    "scan_now": {
+      "service": "mdi:magnify-scan"
+    },
+    "test_redaction": {
+      "service": "mdi:shield-search"
+    },
+    "preview_draft": {
+      "service": "mdi:file-document-outline"
+    },
+    "approve_draft": {
+      "service": "mdi:check-decagram"
+    },
+    "dismiss_draft": {
+      "service": "mdi:close-circle-outline"
+    },
+    "clear_cooldowns": {
+      "service": "mdi:broom"
+    }
+  }
+}

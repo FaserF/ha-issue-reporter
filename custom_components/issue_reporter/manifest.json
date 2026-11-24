@@ -1,0 +1,14 @@
+{
+  "domain": "issue_reporter",
+  "name": "Issue Reporter",
+  "codeowners": ["@FaserF"],
+  "config_flow": true,
+  "dependencies": ["repairs"],
+  "documentation": "https://github.com/FaserF/ha-issue-reporter",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/FaserF/ha-issue-reporter/issues",
+  "quality_scale": "platinum",
+  "requirements": ["PyJWT>=2.8.0", "cryptography>=42.0.0"],
+  "version": "0.1.0"
+}

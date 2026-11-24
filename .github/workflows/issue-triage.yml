@@ -21,4 +21,6 @@ jobs:
       !contains(github.event.issue.title, 'Dependency Dashboard') &&
       !contains(github.event.issue.title, 'Renovate') &&
       !contains(github.event.issue.title, 'Dependabot')
-    uses: ./.github/workflows/reusable-issue-triage.yml
+    uses: FaserF/repo-template/.github/workflows/reusable-issue-triage.yml@v1
+    with:
+      auto_openhands: true

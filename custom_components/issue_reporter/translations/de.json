@@ -1,0 +1,224 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Issue Reporter Einrichtung",
+        "description": "Wähle aus, wie sich Issue Reporter bei GitHub authentifizieren soll.",
+        "data": {
+          "auth_method": "Primäre Authentifizierungsmethode"
+        }
+      },
+      "auth_pat": {
+        "title": "Personal Access Token",
+        "description": "Gib ein GitHub PAT mit Berechtigung zum Erstellen von Issues ein.",
+        "data": {
+          "github_token": "GitHub Token"
+        }
+      },
+      "auth_github_app": {
+        "title": "GitHub App (Bot) Zugangsdaten",
+        "description": "Konfiguriere deine GitHub App (z. B. `faserf-hermes-agent[bot]`). Die Installation ID wird automatisch erkannt, falls leer.",
+        "data": {
+          "app_id": "GitHub App ID",
+          "installation_id": "Installation ID (Optional)",
+          "private_key": "Private Key (PEM)"
+        }
+      },
+      "auth_device_flow": {
+        "title": "GitHub OAuth Device Flow",
+        "description": "Gib die OAuth App Client ID ein.",
+        "data": {
+          "oauth_client_id": "GitHub OAuth Client ID"
+        }
+      },
+      "device_flow_wait": {
+        "title": "Bei GitHub autorisieren",
+        "description": "Öffne **{verification_uri}** und gib den Code **`{user_code}`** ein."
+      },
+      "fallback_auth": {
+        "title": "Fallback für Drittanbieter-Repositories (Optional)",
+        "description": "Eine GitHub App kann nur Issues in Repositories erstellen, auf denen sie installiert ist. Optional kann ein Fallback-Token hinterlegt werden.",
+        "data": {
+          "fallback_auth_method": "Fallback-Authentifizierung",
+          "fallback_token": "Fallback PAT (falls PAT gewählt)"
+        }
+      },
+      "scope": {
+        "title": "Überwachungsbereich & Datenschutz",
+        "description": "Wähle aus, welche Repositories automatisch überwacht werden sollen. Authentifizierter Owner: **{owner}**.",
+        "data": {
+          "owner_filter_mode": "Repository-Owner-Filter",
+          "owner_allowlist": "Erlaubte Owner (kommagetrennt, z. B. FaserF)",
+          "min_severity": "Standard-Mindestschweregrad",
+          "dry_run": "Globalen Dry-Run-Modus aktivieren (nur Entwürfe)",
+          "custom_redactions": "Zusätzliche private Domains / Wörter maskieren (kommagetrennt)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "GitHub erneut authentifizieren",
+        "description": "Die gespeicherten GitHub-Zugangsdaten sind abgelaufen oder ungültig.",
+        "data": {
+          "github_token": "GitHub Token",
+          "private_key": "Private Key (PEM)"
+        }
+      }
+    },
+    "progress": {
+      "wait_device_flow": "Warte auf GitHub Device Flow Autorisierung unter {verification_uri} mit Code {user_code}..."
+    },
+    "error": {
+      "invalid_auth": "Der GitHub-Token wurde abgelehnt.",
+      "invalid_app_auth": "GitHub App ID, Installation ID oder PEM-Schlüssel konnte nicht verifiziert werden.",
+      "device_flow_error": "GitHub OAuth Device Flow konnte nicht abgeschlossen werden."
+    },
+    "abort": {
+      "already_configured": "Issue Reporter ist bereits eingerichtet.",
+      "reauth_successful": "Erneute Authentifizierung erfolgreich.",
+      "device_flow_error": "GitHub Device Flow abgelaufen oder abgelehnt."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Issue Reporter Einstellungen",
+        "menu_options": {
+          "general": "Allgemein, Owner-Filter & Anti-Spam",
+          "filters": "Lokale & temporäre Fehlerfilter",
+          "redaction": "Datenschutz & Maskierungsregeln",
+          "integrations": "Custom Integrations verwalten",
+          "addons": "Supervisor Add-ons verwalten",
+          "auth": "GitHub Tokens aktualisieren"
+        }
+      },
+      "general": {
+        "title": "Allgemein, Owner-Filter & Anti-Spam",
+        "data": {
+          "owner_filter_mode": "Repository-Owner-Filter",
+          "owner_allowlist": "Erlaubte GitHub-Owner (kommagetrennt)",
+          "dry_run": "Globaler Dry-Run-Modus",
+          "min_severity": "Standard-Mindestschweregrad",
+          "min_occurrences_error": "Mindestanzahl ERROR vor Meldung",
+          "min_occurrences_warning": "Mindestanzahl WARNING vor Meldung",
+          "occurrence_window_minutes": "Zeitfenster für Häufigkeit (Minuten)",
+          "cooldown_hours": "Cooldown pro Fehler-Signatur (Stunden)",
+          "max_issues_per_hour": "Maximale Issues pro Stunde",
+          "max_issues_per_repo_day": "Maximale Issues pro Repo & Tag",
+          "skip_outdated": "Veraltete Versionen überspringen",
+          "allow_dev_edge": "Meldungen aus Dev-/Edge-Builds erlauben",
+          "comment_on_newer_version": "Bei neuerer Version einmalig auf offenem Duplikat kommentieren",
+          "addon_poll_minutes": "Add-on-Log-Abfrageintervall (Minuten)",
+          "include_core_addons": "Offizielle core_* Add-ons einbeziehen"
+        }
+      },
+      "filters": {
+        "title": "Lokale & temporäre Fehlerfilter",
+        "data": {
+          "ignore_network_errors": "Netzwerk-, DNS-, Timeout- und 502/503/504-Fehler ignorieren",
+          "ignore_auth_errors": "Lokale Auth-, 401/403- und abgelaufene Session-Fehler ignorieren",
+          "ignore_rate_limit_errors": "HTTP 429 Rate-Limit-Fehler ignorieren",
+          "ignore_lifecycle_errors": "Neustart- und Shutdown-Abbrüche ignorieren",
+          "custom_ignore_patterns": "Eigene Ignore-Regex-Muster (eine pro Zeile)"
+        }
+      },
+      "redaction": {
+        "title": "Datenschutz & Maskierungsregeln",
+        "data": {
+          "custom_redactions": "Zusätzliche Domains / Begriffe zum Maskieren",
+          "custom_redaction_regexes": "Zusätzliche Maskierungs-Regex (eine pro Zeile)",
+          "strict_entropy_guard": "Strikten Pre-Flight Leak Guard aktivieren"
+        }
+      },
+      "integrations": {
+        "title": "Custom Integrations verwalten",
+        "data": {
+          "target_key": "Integration auswählen"
+        }
+      },
+      "addons": {
+        "title": "Supervisor Add-ons verwalten",
+        "data": {
+          "target_key": "Add-on auswählen"
+        }
+      },
+      "edit_target": {
+        "title": "{target_name} konfigurieren",
+        "data": {
+          "enabled": "Überwachung aktiv",
+          "mode": "Meldemodus",
+          "min_severity": "Mindestschweregrad",
+          "repo_override": "GitHub-Repository überschreiben (owner/repo)",
+          "ignore_patterns": "Zielspezifische Ignore-Regex (eine pro Zeile)"
+        }
+      },
+      "auth": {
+        "title": "GitHub Tokens aktualisieren",
+        "data": {
+          "github_token": "Neuer primärer PAT (leer lassen zum Beibehalten)",
+          "fallback_token": "Neuer Fallback-PAT (leer lassen zum Beibehalten)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Der GitHub-Token wurde abgelehnt.",
+      "invalid_regex": "Mindestens ein regulärer Ausdruck ist ungültig."
+    },
+    "abort": {
+      "no_targets_found": "Keine passenden Integrationen oder Add-ons gefunden."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "monitored_targets": {
+        "name": "Überwachte Ziele"
+      },
+      "pending_drafts": {
+        "name": "Ausstehende Entwürfe"
+      },
+      "issues_created": {
+        "name": "Erstellte Issues"
+      },
+      "duplicates_suppressed": {
+        "name": "Unterdrückte Ereignisse"
+      },
+      "leak_guard_blocks": {
+        "name": "Leak-Guard-Blockierungen"
+      },
+      "github_api_remaining": {
+        "name": "GitHub API Kontingent"
+      }
+    }
+  },
+  "issues": {
+    "pending_draft_approval": {
+      "title": "GitHub-Issue-Entwurf für {target} prüfen",
+      "description": "Issue Reporter hat einen bereinigten Issue-Entwurf für **{repo}** vorbereitet:\n\n`{title}`\n\nAuszug:\n```\n{excerpt}\n```"
+    },
+    "leak_guard_blocked": {
+      "title": "Pre-Flight Leak Guard hat Bericht für {target} blockiert",
+      "description": "Issue Reporter hat eine Meldung für **{target}** abgebrochen, da möglicherweise unmaskierte Daten enthalten waren ({reasons})."
+    }
+  },
+  "exceptions": {
+    "not_configured": {
+      "message": "Issue Reporter ist nicht konfiguriert."
+    },
+    "not_loaded": {
+      "message": "Issue Reporter ist noch nicht geladen."
+    }
+  },
+  "system_health": {
+    "info": {
+      "version": "Version",
+      "configured": "Konfiguriert",
+      "auth_actor": "GitHub Akteur",
+      "dry_run_mode": "Dry-Run-Modus",
+      "monitored_integrations": "Überwachte Integrationen",
+      "monitored_addons": "Überwachte Add-ons",
+      "pending_drafts": "Ausstehende Entwürfe",
+      "issues_created": "Erstellte Issues",
+      "duplicates_suppressed": "Unterdrückte Ereignisse",
+      "leak_guard_blocks": "Leak-Guard-Blockierungen",
+      "github_api_remaining": "GitHub API Kontingent"
+    }
+  }
+}

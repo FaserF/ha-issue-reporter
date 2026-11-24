@@ -1,0 +1,83 @@
+scan_now:
+  name: Scan now
+  description: Refresh target discovery, harvested secrets, and poll Supervisor add-on logs immediately.
+
+test_redaction:
+  name: Test privacy redaction
+  description: Run the 4-layer redaction pipeline and pre-flight leak guard on sample text without submitting anything.
+  fields:
+    text:
+      name: Sample text
+      description: Log excerpt or text to test against all active redaction rules.
+      required: true
+      selector:
+        text:
+          multiline: true
+
+preview_draft:
+  name: Preview GitHub issue draft
+  description: Render a sanitized GitHub issue preview (including template field mapping and duplicate check) without creating an issue.
+  fields:
+    draft_id:
+      name: Draft ID
+      description: Optional existing pending or dry-run draft ID to inspect.
+      required: false
+      selector:
+        text:
+    target_key:
+      name: Target key
+      description: Target key such as integration:openwrt or addon:edfe50eb_entramirror when previewing synthetic input.
+      required: false
+      selector:
+        text:
+    sample_message:
+      name: Sample error message
+      description: Optional error text to render with the target repository's issue template.
+      required: false
+      selector:
+        text:
+          multiline: true
+    severity:
+      name: Severity
+      description: Severity level for synthetic preview.
+      required: false
+      default: ERROR
+      selector:
+        select:
+          options:
+            - WARNING
+            - ERROR
+            - CRITICAL
+
+approve_draft:
+  name: Approve and publish draft
+  description: Publish a queued or dry-run issue draft to GitHub after passing the pre-flight leak guard.
+  fields:
+    draft_id:
+      name: Draft ID
+      description: ID of the draft shown in the pending drafts sensor.
+      required: true
+      selector:
+        text:
+
+dismiss_draft:
+  name: Dismiss draft
+  description: Dismiss a queued issue draft and suppress future reports for its fingerprint.
+  fields:
+    draft_id:
+      name: Draft ID
+      description: ID of the draft to dismiss.
+      required: true
+      selector:
+        text:
+
+clear_cooldowns:
+  name: Clear deduplication cooldowns
+  description: Clear local fingerprint cooldowns and dismissed signatures.
+  fields:
+    target_key:
+      name: Target key
+      description: Optional target key; omit to clear all cooldowns.
+      required: false
+      selector:
+        text:

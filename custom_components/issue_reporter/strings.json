@@ -1,0 +1,224 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Issue Reporter Setup",
+        "description": "Choose how Issue Reporter should authenticate with GitHub.",
+        "data": {
+          "auth_method": "Primary Authentication Method"
+        }
+      },
+      "auth_pat": {
+        "title": "Personal Access Token",
+        "description": "Enter a GitHub PAT with issue creation permission (`public_repo` or repository Issues: Read & Write).",
+        "data": {
+          "github_token": "GitHub Token"
+        }
+      },
+      "auth_github_app": {
+        "title": "GitHub App (Bot) Credentials",
+        "description": "Configure your GitHub App (for example `faserf-hermes-agent[bot]`). Installation ID is auto-detected if left empty.",
+        "data": {
+          "app_id": "GitHub App ID",
+          "installation_id": "Installation ID (Optional)",
+          "private_key": "Private Key (PEM)"
+        }
+      },
+      "auth_device_flow": {
+        "title": "GitHub OAuth Device Flow",
+        "description": "Enter the OAuth App Client ID configured with Device Flow enabled.",
+        "data": {
+          "oauth_client_id": "GitHub OAuth Client ID"
+        }
+      },
+      "device_flow_wait": {
+        "title": "Authorize in GitHub",
+        "description": "Open **{verification_uri}** and enter code **`{user_code}`** to authorize Issue Reporter."
+      },
+      "fallback_auth": {
+        "title": "3rd-Party Repository Fallback (Optional)",
+        "description": "A GitHub App can only open issues on repositories where it is installed. Optionally attach a user token for 3rd-party repositories.",
+        "data": {
+          "fallback_auth_method": "Fallback Authentication",
+          "fallback_token": "Fallback PAT (if PAT selected)"
+        }
+      },
+      "scope": {
+        "title": "Monitoring Scope & Privacy Defaults",
+        "description": "Choose which repositories to monitor automatically. Authenticated owner: **{owner}**.",
+        "data": {
+          "owner_filter_mode": "Repository Owner Filter",
+          "owner_allowlist": "Custom Allowed Owners (comma-separated, e.g. FaserF)",
+          "min_severity": "Default Minimum Log Severity",
+          "dry_run": "Enable Global Dry-Run Mode (preview drafts without posting)",
+          "custom_redactions": "Extra Private Domains / Words to Redact (comma-separated)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate GitHub",
+        "description": "Stored GitHub credentials failed or expired. Please provide updated credentials.",
+        "data": {
+          "github_token": "GitHub Token",
+          "private_key": "Private Key (PEM)"
+        }
+      }
+    },
+    "progress": {
+      "wait_device_flow": "Waiting for GitHub Device Flow authorization at {verification_uri} with code {user_code}..."
+    },
+    "error": {
+      "invalid_auth": "GitHub rejected the provided token.",
+      "invalid_app_auth": "GitHub App ID, Installation ID, or PEM private key could not be verified.",
+      "device_flow_error": "Could not initiate or complete GitHub OAuth Device Flow."
+    },
+    "abort": {
+      "already_configured": "Issue Reporter is already configured.",
+      "reauth_successful": "Re-authentication succeeded.",
+      "device_flow_error": "GitHub Device Flow authorization expired or was denied."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Issue Reporter Settings",
+        "menu_options": {
+          "general": "General, Owner Filter & Anti-Spam",
+          "filters": "Local & Transient Error Filters",
+          "redaction": "Privacy & Custom Redaction Rules",
+          "integrations": "Manage Custom Integrations",
+          "addons": "Manage Supervisor Add-ons",
+          "auth": "Update GitHub Tokens"
+        }
+      },
+      "general": {
+        "title": "General, Owner Filter & Anti-Spam",
+        "data": {
+          "owner_filter_mode": "Repository Owner Filter",
+          "owner_allowlist": "Allowed GitHub Owners (comma-separated)",
+          "dry_run": "Global Dry-Run Mode",
+          "min_severity": "Default Minimum Severity",
+          "min_occurrences_error": "Minimum ERROR occurrences before reporting",
+          "min_occurrences_warning": "Minimum WARNING occurrences before reporting",
+          "occurrence_window_minutes": "Occurrence counting window (minutes)",
+          "cooldown_hours": "Per-fingerprint cooldown (hours)",
+          "max_issues_per_hour": "Maximum issues created per hour",
+          "max_issues_per_repo_day": "Maximum issues per repository per day",
+          "skip_outdated": "Skip outdated integration/add-on versions",
+          "allow_dev_edge": "Allow reporting from dev / edge pre-releases",
+          "comment_on_newer_version": "Comment once on matching open issue if running newer version",
+          "addon_poll_minutes": "Supervisor add-on log poll interval (minutes)",
+          "include_core_addons": "Include official core_* add-ons in discovery"
+        }
+      },
+      "filters": {
+        "title": "Local & Transient Error Filters",
+        "data": {
+          "ignore_network_errors": "Ignore network, DNS, timeout, and 502/503/504 errors",
+          "ignore_auth_errors": "Ignore local authentication, 401/403, and expired session errors",
+          "ignore_rate_limit_errors": "Ignore HTTP 429 rate-limit errors",
+          "ignore_lifecycle_errors": "Ignore shutdown and task cancellation errors",
+          "custom_ignore_patterns": "Custom ignore regex patterns (one per line)"
+        }
+      },
+      "redaction": {
+        "title": "Privacy & Custom Redaction Rules",
+        "data": {
+          "custom_redactions": "Extra literal domains / keywords to mask",
+          "custom_redaction_regexes": "Extra redaction regex patterns (one per line)",
+          "strict_entropy_guard": "Enable strict high-entropy Pre-Flight Leak Guard"
+        }
+      },
+      "integrations": {
+        "title": "Manage Custom Integrations",
+        "data": {
+          "target_key": "Select Custom Integration"
+        }
+      },
+      "addons": {
+        "title": "Manage Supervisor Add-ons",
+        "data": {
+          "target_key": "Select Supervisor Add-on"
+        }
+      },
+      "edit_target": {
+        "title": "Configure {target_name}",
+        "data": {
+          "enabled": "Monitor this target",
+          "mode": "Submission mode",
+          "min_severity": "Minimum log severity",
+          "repo_override": "Target GitHub repository override (owner/repo)",
+          "ignore_patterns": "Target-specific ignore regexes (one per line)"
+        }
+      },
+      "auth": {
+        "title": "Update GitHub Tokens",
+        "data": {
+          "github_token": "New Primary PAT (leave blank to keep existing)",
+          "fallback_token": "New Fallback PAT (leave blank to keep existing)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "GitHub rejected the token.",
+      "invalid_regex": "One or more regular expressions are invalid."
+    },
+    "abort": {
+      "no_targets_found": "No matching integrations or add-ons discovered yet."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "monitored_targets": {
+        "name": "Monitored targets"
+      },
+      "pending_drafts": {
+        "name": "Pending drafts"
+      },
+      "issues_created": {
+        "name": "Issues created"
+      },
+      "duplicates_suppressed": {
+        "name": "Suppressed events"
+      },
+      "leak_guard_blocks": {
+        "name": "Leak guard blocks"
+      },
+      "github_api_remaining": {
+        "name": "GitHub API remaining"
+      }
+    }
+  },
+  "issues": {
+    "pending_draft_approval": {
+      "title": "Review GitHub issue draft for {target}",
+      "description": "Issue Reporter prepared a sanitized issue for **{repo}**:\n\n`{title}`\n\nExcerpt:\n```\n{excerpt}\n```"
+    },
+    "leak_guard_blocked": {
+      "title": "Pre-flight Leak Guard blocked report for {target}",
+      "description": "Issue Reporter aborted an automated GitHub issue for **{target}** because potential unmasked data remained ({reasons}). Review your custom redaction rules or run `issue_reporter.test_redaction`."
+    }
+  },
+  "exceptions": {
+    "not_configured": {
+      "message": "Issue Reporter is not configured."
+    },
+    "not_loaded": {
+      "message": "Issue Reporter is not loaded yet."
+    }
+  },
+  "system_health": {
+    "info": {
+      "version": "Version",
+      "configured": "Configured",
+      "auth_actor": "GitHub Actor",
+      "dry_run_mode": "Dry-Run Mode",
+      "monitored_integrations": "Monitored Integrations",
+      "monitored_addons": "Monitored Add-ons",
+      "pending_drafts": "Pending Drafts",
+      "issues_created": "Issues Created",
+      "duplicates_suppressed": "Suppressed Events",
+      "leak_guard_blocks": "Leak Guard Blocks",
+      "github_api_remaining": "GitHub API Remaining"
+    }
+  }
+}

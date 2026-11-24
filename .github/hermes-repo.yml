@@ -2,7 +2,7 @@
 # Schema version: 1.0
 
 # Repository Type: ha-integration | ha-addon | go | python | generic
-type: generic
+type: ha-integration
 
 # Profile: full (all workflows, deep testing, OpenHands solver) | minimal (lightweight linter, basic CI)
 profile: full
