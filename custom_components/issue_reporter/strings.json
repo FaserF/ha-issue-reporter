@@ -51,6 +51,7 @@
           "owner_allowlist": "Custom Allowed Owners (comma-separated, e.g. FaserF)",
           "min_severity": "Default Minimum Log Severity",
           "dry_run": "Enable Global Dry-Run Mode (preview drafts without posting)",
+          "require_approval": "Require Manual Approval Before Creating Issues",
           "custom_redactions": "Extra Private Domains / Words to Redact (comma-separated)"
         }
       },
@@ -96,6 +97,7 @@
           "owner_filter_mode": "Repository Owner Filter",
           "owner_allowlist": "Allowed GitHub Owners (comma-separated)",
           "dry_run": "Global Dry-Run Mode",
+          "require_approval": "Require Manual Approval Before Creating Issues",
           "min_severity": "Default Minimum Severity",
           "min_occurrences_error": "Minimum ERROR occurrences before reporting",
           "min_occurrences_warning": "Minimum WARNING occurrences before reporting",
@@ -185,6 +187,20 @@
       },
       "github_api_remaining": {
         "name": "GitHub API remaining"
+      }
+    },
+    "button": {
+      "approve_latest_draft": {
+        "name": "Approve latest draft"
+      },
+      "approve_all_drafts": {
+        "name": "Approve all pending drafts"
+      },
+      "scan_now": {
+        "name": "Scan now"
+      },
+      "clear_cooldowns": {
+        "name": "Clear cooldowns"
       }
     }
   },

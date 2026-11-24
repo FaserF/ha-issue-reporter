@@ -51,6 +51,7 @@
           "owner_allowlist": "Erlaubte Owner (kommagetrennt, z. B. FaserF)",
           "min_severity": "Standard-Mindestschweregrad",
           "dry_run": "Globalen Dry-Run-Modus aktivieren (nur Entwürfe)",
+          "require_approval": "Manuelle Freigabe vor Issue-Erstellung erforderlich",
           "custom_redactions": "Zusätzliche private Domains / Wörter maskieren (kommagetrennt)"
         }
       },
@@ -96,6 +97,7 @@
           "owner_filter_mode": "Repository-Owner-Filter",
           "owner_allowlist": "Erlaubte GitHub-Owner (kommagetrennt)",
           "dry_run": "Globaler Dry-Run-Modus",
+          "require_approval": "Manuelle Freigabe vor Issue-Erstellung erforderlich",
           "min_severity": "Standard-Mindestschweregrad",
           "min_occurrences_error": "Mindestanzahl ERROR vor Meldung",
           "min_occurrences_warning": "Mindestanzahl WARNING vor Meldung",
@@ -167,6 +169,12 @@
     }
   },
   "entity": {
+    "button": {
+      "approve_latest_draft": { "name": "Neuesten Entwurf freigeben" },
+      "approve_all_drafts": { "name": "Alle ausstehenden Entwürfe freigeben" },
+      "scan_now": { "name": "Jetzt scannen" },
+      "clear_cooldowns": { "name": "Cooldowns zurücksetzen" }
+    },
     "sensor": {
       "monitored_targets": {
         "name": "Überwachte Ziele"

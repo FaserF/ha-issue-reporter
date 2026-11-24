@@ -51,8 +51,10 @@ from .const import (
     CONF_OWNER_ALLOWLIST,
     CONF_OWNER_FILTER_MODE,
     CONF_PRIVATE_KEY,
+    CONF_REQUIRE_APPROVAL,
     DEFAULT_MIN_SEVERITY,
     DEFAULT_OAUTH_CLIENT_ID,
+    DEFAULT_REQUIRE_APPROVAL,
     DOMAIN,
     OWNER_FILTER_CUSTOM,
     OWNER_FILTER_MANUAL,
@@ -350,6 +352,9 @@ class IssueReporterConfigFlow(ConfigFlow, domain=DOMAIN):
                 ),
                 CONF_MIN_SEVERITY: user_input[CONF_MIN_SEVERITY],
                 CONF_DRY_RUN: bool(user_input[CONF_DRY_RUN]),
+                CONF_REQUIRE_APPROVAL: bool(
+                    user_input.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
+                ),
                 CONF_CUSTOM_REDACTIONS: split_csv_or_lines(
                     user_input.get(CONF_CUSTOM_REDACTIONS)
                 ),
@@ -399,6 +404,9 @@ class IssueReporterConfigFlow(ConfigFlow, domain=DOMAIN):
                         )
                     ),
                     vol.Required(CONF_DRY_RUN, default=True): bool,
+                    vol.Required(
+                        CONF_REQUIRE_APPROVAL, default=DEFAULT_REQUIRE_APPROVAL
+                    ): bool,
                     vol.Optional(CONF_CUSTOM_REDACTIONS, default=""): str,
                 }
             ),

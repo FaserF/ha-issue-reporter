@@ -47,6 +47,7 @@ from .const import (
     CONF_OCCURRENCE_WINDOW_MINUTES,
     CONF_OWNER_ALLOWLIST,
     CONF_OWNER_FILTER_MODE,
+    CONF_REQUIRE_APPROVAL,
     CONF_SKIP_OUTDATED,
     CONF_STRICT_ENTROPY_GUARD,
     CONF_TARGET_OVERRIDES,
@@ -111,6 +112,7 @@ class IssueReporterOptionsFlow(OptionsFlow):
                         user_input.get(CONF_OWNER_ALLOWLIST)
                     ),
                     CONF_DRY_RUN: bool(user_input[CONF_DRY_RUN]),
+                    CONF_REQUIRE_APPROVAL: bool(user_input[CONF_REQUIRE_APPROVAL]),
                     CONF_MIN_SEVERITY: user_input[CONF_MIN_SEVERITY],
                     CONF_MIN_OCCURRENCES_ERROR: int(
                         user_input[CONF_MIN_OCCURRENCES_ERROR]

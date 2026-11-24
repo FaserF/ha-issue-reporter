@@ -40,6 +40,7 @@ OWNER_FILTER_MANUAL: Final = "manual"
 CONF_OWNER_FILTER_MODE: Final = "owner_filter_mode"
 CONF_OWNER_ALLOWLIST: Final = "owner_allowlist"
 CONF_DRY_RUN: Final = "dry_run"
+CONF_REQUIRE_APPROVAL: Final = "require_approval"
 CONF_MIN_SEVERITY: Final = "min_severity"
 CONF_CUSTOM_REDACTIONS: Final = "custom_redactions"
 CONF_CUSTOM_REDACTION_REGEXES: Final = "custom_redaction_regexes"
@@ -88,6 +89,7 @@ CONF_CUSTOM_IGNORE_PATTERNS: Final = "custom_ignore_patterns"
 CONF_TARGET_OVERRIDES: Final = "target_overrides"
 
 DEFAULT_DRY_RUN: Final = False
+DEFAULT_REQUIRE_APPROVAL: Final = False
 DEFAULT_MIN_SEVERITY: Final = SEVERITY_ERROR
 DEFAULT_MIN_OCCURRENCES_ERROR: Final = 1
 DEFAULT_MIN_OCCURRENCES_WARNING: Final = 3

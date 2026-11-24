@@ -16,10 +16,12 @@ from .const import (
     CONF_MIN_SEVERITY,
     CONF_OWNER_ALLOWLIST,
     CONF_OWNER_FILTER_MODE,
+    CONF_REQUIRE_APPROVAL,
     CONF_TARGET_OVERRIDES,
     DEFAULT_DRY_RUN,
     DEFAULT_INCLUDE_CORE_ADDONS,
     DEFAULT_MIN_SEVERITY,
+    DEFAULT_REQUIRE_APPROVAL,
     LOGGER,
     MODE_APPROVAL,
     MODE_AUTO,
@@ -256,6 +258,9 @@ def apply_target_policies(
         allowlist = set()
 
     global_dry_run = bool(config.get(CONF_DRY_RUN, DEFAULT_DRY_RUN))
+    require_approval = bool(
+        config.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
+    )
     default_severity = str(config.get(CONF_MIN_SEVERITY, DEFAULT_MIN_SEVERITY))
     raw_overrides = config.get(CONF_TARGET_OVERRIDES) or {}
 
@@ -288,10 +293,10 @@ def apply_target_policies(
             target.mode = override.mode
         elif global_dry_run:
             target.mode = MODE_DRY_RUN
-        elif owner_matched:
-            target.mode = MODE_AUTO
-        else:
+        elif require_approval:
             target.mode = MODE_APPROVAL
+        else:
+            target.mode = MODE_AUTO
 
         target.min_severity = override.min_severity or default_severity
         result[target.target_key] = target

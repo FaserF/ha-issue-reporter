@@ -29,6 +29,7 @@ from .const import (
     CONF_OCCURRENCE_WINDOW_MINUTES,
     CONF_OWNER_ALLOWLIST,
     CONF_OWNER_FILTER_MODE,
+    CONF_REQUIRE_APPROVAL,
     CONF_SKIP_OUTDATED,
     DEFAULT_ADDON_POLL_MINUTES,
     DEFAULT_ALLOW_DEV_EDGE,
@@ -42,6 +43,7 @@ from .const import (
     DEFAULT_MIN_OCCURRENCES_WARNING,
     DEFAULT_MIN_SEVERITY,
     DEFAULT_OCCURRENCE_WINDOW_MINUTES,
+    DEFAULT_REQUIRE_APPROVAL,
     DEFAULT_SKIP_OUTDATED,
     MODE_APPROVAL,
     MODE_AUTO,
@@ -87,6 +89,12 @@ def build_general_schema(cfg: dict[str, Any]) -> vol.Schema:
             vol.Required(
                 CONF_DRY_RUN,
                 default=bool(cfg.get(CONF_DRY_RUN, DEFAULT_DRY_RUN)),
+            ): bool,
+            vol.Required(
+                CONF_REQUIRE_APPROVAL,
+                default=bool(
+                    cfg.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
+                ),
             ): bool,
             vol.Required(
                 CONF_MIN_SEVERITY,

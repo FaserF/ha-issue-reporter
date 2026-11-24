@@ -167,6 +167,12 @@
     }
   },
   "entity": {
+    "button": {
+      "approve_latest_draft": { "name": "Approve latest draft" },
+      "approve_all_drafts": { "name": "Approve all pending drafts" },
+      "scan_now": { "name": "Scan now" },
+      "clear_cooldowns": { "name": "Clear cooldowns" }
+    },
     "sensor": {
       "monitored_targets": {
         "name": "Monitored targets"

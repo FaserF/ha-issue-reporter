@@ -8,6 +8,7 @@ from custom_components.issue_reporter.const import (
     CONF_DRY_RUN,
     CONF_OWNER_ALLOWLIST,
     CONF_OWNER_FILTER_MODE,
+    CONF_REQUIRE_APPROVAL,
     CONF_TARGET_OVERRIDES,
     MODE_APPROVAL,
     MODE_AUTO,
@@ -130,7 +131,8 @@ async def test_apply_target_policies_owner_filtering(
     assert res_self["integration:localtuya"].enabled is False
     assert res_self["addon:a0d7b954_vscode"].enabled is False
 
-    # Manual override enabling 3rd-party integration defaults to approval mode
+    # Manual override enabling 3rd-party integration: mode is AUTO by default
+    # (require_approval defaults to False; set True to get APPROVAL mode)
     res_override = apply_target_policies(
         all_targets,
         {
@@ -144,8 +146,20 @@ async def test_apply_target_policies_owner_filtering(
         authenticated_owner="FaserF",
     )
     assert res_override["integration:localtuya"].enabled is True
-    assert res_override["integration:localtuya"].mode == MODE_APPROVAL
+    assert res_override["integration:localtuya"].mode == MODE_AUTO
     assert res_override["integration:openwrt"].mode == MODE_DRY_RUN
+    # With require_approval=True, all targets get APPROVAL mode
+    res_approval = apply_target_policies(
+        all_targets,
+        {
+            CONF_OWNER_FILTER_MODE: OWNER_FILTER_CUSTOM,
+            CONF_OWNER_ALLOWLIST: ["FaserF"],
+            CONF_REQUIRE_APPROVAL: True,
+            CONF_TARGET_OVERRIDES: {"integration:localtuya": {"enabled": True}},
+        },
+        authenticated_owner="FaserF",
+    )
+    assert res_approval["integration:localtuya"].mode == MODE_APPROVAL
 
     # Manual mode starts everything disabled
     res_manual = apply_target_policies(
