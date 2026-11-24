@@ -14,6 +14,7 @@ from homeassistant.helpers.system_info import async_get_system_info
 from .const import FINGERPRINT_PREFIX, LOGGER, TARGET_ADDON
 from .dedup import is_dev_or_edge
 from .github_client import GitHubClient
+from .ha_context import collect_ha_target_context
 from .models import LogEvent, RenderedIssue, TargetInfo
 
 
@@ -132,6 +133,21 @@ def _resolve_field_value(
             return label, _match_dropdown_option(
                 opts, [ctx["target_short_name"], ctx["target_name"]]
             )
+        if any(
+            k in fid or k in label_low
+            for k in ("connection", "setup_type", "setup type")
+        ):
+            cands = [ctx["connection_method"]] if ctx["connection_method"] else []
+            return label, _match_dropdown_option(opts, [*cands, "Other"])
+        if "variant" in fid or "variant" in label_low:
+            cands = [ctx["variant"]] if ctx["variant"] else []
+            return label, _match_dropdown_option(opts, [*cands, "Other"])
+        if any(k in fid or k in label_low for k in ("plan", "tier")):
+            cands = [ctx["plan"]] if ctx["plan"] else []
+            return label, _match_dropdown_option(opts, [*cands, "Other"])
+        if "departure_type" in fid or "departure type" in label_low:
+            cands = [ctx["departure_type"]] if ctx["departure_type"] else []
+            return label, _match_dropdown_option(opts, [*cands, "Other"])
         return label, _match_dropdown_option(
             opts, [ctx["target_channel"], ctx["severity"]]
         )
@@ -184,6 +200,11 @@ def _resolve_field_value(
             )
         if is_ha_ver:
             return label, ctx["ha_version"]
+        if fid == "addon_version" and ctx["target_kind"] != TARGET_ADDON:
+            return label, (
+                ctx["related_addon_version"]
+                or "_Not installed / External setup (automated log report)_"
+            )
         is_target_ver = (
             fid
             in (
@@ -209,6 +230,57 @@ def _resolve_field_value(
         )
         if is_target_ver:
             return label, ctx["target_version"]
+        if any(
+            k in fid or k in label_low
+            for k in ("valetudo_version", "openwrt_version", "firmware_version")
+        ) or ("version" in fid and ctx["app_sw_version"]):
+            return label, (
+                ctx["app_sw_version"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if any(
+            k in fid or k in label_low
+            for k in (
+                "robot_model",
+                "router_model",
+                "device_model",
+                "model / brand",
+                "robot model",
+                "router model",
+            )
+        ):
+            return label, (
+                ctx["device_model"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if "variant" in fid or "variant" in label_low:
+            return label, (
+                ctx["variant"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if any(
+            k in fid or k in label_low
+            for k in ("connection", "setup_type", "setup type")
+        ):
+            return label, (
+                ctx["connection_method"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if any(k in fid or k in label_low for k in ("plan", "tier")):
+            return label, (
+                ctx["plan"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if "num_departures" in fid or "number of departures" in label_low:
+            return label, (
+                ctx["num_departures"]
+                or "_Not automatically detected (automated log report)_"
+            )
+        if "api_endpoint" in fid or "api endpoint" in label_low:
+            return label, (
+                ctx["api_endpoint"]
+                or "_Not automatically detected (automated log report)_"
+            )
         return label, "_Not automatically detected (automated log report)_"
 
     if ftype == "textarea":
@@ -230,6 +302,8 @@ def _resolve_field_value(
             return label, (
                 f"{ctx['target_name']} should operate without logging `{ctx['severity']}` errors."
             )
+        if any(k in fid or k in label_low for k in ("diagnostic",)):
+            return label, ctx["additional_context"]
         if any(
             k in fid or k in label_low
             for k in ("problem", "describe", "description", "bug")
@@ -293,10 +367,12 @@ class IssueTemplateEngine:
                 f"- **Regression Notice:** Previously closed in #{regression_of}, still occurring on `{target.version}`."
             )
 
+        ha_ctx = collect_ha_target_context(hass, target)
         additional_lines = [
             f"- Home Assistant Core: `{HA_VERSION}` ({ha_install_type})",
             f"- Python: `{platform.python_version()}`",
             f"- Target identifier: `{target.identifier}`",
+            *ha_ctx.get("extra_diagnostic_bullets", []),
         ]
 
         ctx: dict[str, Any] = {
@@ -305,6 +381,7 @@ class IssueTemplateEngine:
             "python_version": platform.python_version(),
             "target_name": target.name,
             "target_short_name": target.short_name,
+            "target_kind": target.kind,
             "target_kind_label": target_kind_label,
             "target_version": target.version,
             "target_channel": target.channel,
@@ -317,6 +394,15 @@ class IssueTemplateEngine:
             "logs_block": logs_block,
             "problem_summary": "\n".join(problem_lines),
             "additional_context": "\n".join(additional_lines),
+            "device_model": ha_ctx.get("device_model", ""),
+            "app_sw_version": ha_ctx.get("app_sw_version", ""),
+            "variant": ha_ctx.get("variant", ""),
+            "connection_method": ha_ctx.get("connection_method", ""),
+            "plan": ha_ctx.get("plan", ""),
+            "related_addon_version": ha_ctx.get("related_addon_version", ""),
+            "departure_type": ha_ctx.get("departure_type", ""),
+            "num_departures": ha_ctx.get("num_departures", ""),
+            "api_endpoint": ha_ctx.get("api_endpoint", ""),
         }
 
         raw_templates = await self._github.async_fetch_bug_templates(owner, repo)
