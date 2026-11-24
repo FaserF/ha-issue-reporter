@@ -292,6 +292,12 @@ def _is_sensitive_key(key: str) -> bool:
         "title",
         "slug",
         "channel",
+        "github_user",
+        "fallback_user",
+        "owner",
+        "repo_owner",
+        "author",
+        "maintainer",
     ):
         return False
     return any(word in lowered for word in SENSITIVE_KEY_KEYWORDS)
@@ -358,10 +364,12 @@ class PrivacyRedactor:
         self._custom_literal_patterns: list[re.Pattern[str]] = []
         self._custom_regexes: list[re.Pattern[str]] = []
         self._strict_entropy = DEFAULT_STRICT_ENTROPY_GUARD
+        self._public_github_user = ""
         self.update_config(config)
 
     def update_config(self, config: dict[str, Any]) -> None:
         """Reload user custom redaction words, domains, regexes, and guard mode."""
+        self._public_github_user = str(config.get("github_user") or "").strip()
         self._strict_entropy = bool(
             config.get(CONF_STRICT_ENTROPY_GUARD, DEFAULT_STRICT_ENTROPY_GUARD)
         )
@@ -450,8 +458,11 @@ class PrivacyRedactor:
                     expanded.add(b64)
 
         self._harvested_literals = expanded
-        if expanded:
-            ordered = sorted(expanded, key=len, reverse=True)
+        # Never treat public GitHub owner handle from our own config as a secret
+        if self._public_github_user:
+            self._harvested_literals.discard(self._public_github_user)
+        if self._harvested_literals:
+            ordered = sorted(self._harvested_literals, key=len, reverse=True)
             self._harvested_pattern = re.compile(
                 "|".join(re.escape(lit) for lit in ordered)
             )
