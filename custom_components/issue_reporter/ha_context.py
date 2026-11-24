@@ -13,6 +13,31 @@ from .const import DOMAIN, LOGGER, TARGET_ADDON
 from .models import TargetInfo
 
 _IGNORED_STATES = frozenset({"", "unknown", "unavailable", "none", "null"})
+_GENERIC_SUBDEVICES = (
+    "wireless radio",
+    "wireless ssid",
+    "tracked device",
+    "home assistant app",
+)
+
+
+def _is_generic_device(dev: Any) -> bool:
+    """Return True for non-primary sub-devices or HACS/marketplace entries."""
+    mdl = (getattr(dev, "model", None) or "").strip().lower()
+    if mdl in ("integration", "app", "add-on"):
+        return True
+    return any(g in mdl for g in _GENERIC_SUBDEVICES)
+
+
+def _format_device_model(dev: Any) -> str:
+    """Format manufacturer + model cleanly without duplicating manufacturer."""
+    mfg = _clean_str(getattr(dev, "manufacturer", None))
+    mdl = _clean_str(getattr(dev, "model", None))
+    if mdl:
+        if mfg and mfg.lower() not in mdl.lower():
+            return f"{mfg} {mdl}"
+        return mdl
+    return mfg
 
 _SAFE_CONNECTION_KEYS = (
     "connection_method",
@@ -150,24 +175,40 @@ def collect_ha_target_context(
     # 1. Device Registry (in-memory, zero network I/O)
     try:
         dev_reg = dr.async_get(hass)
+        matched_devs: list[Any] = []
         for eid in entry_ids:
-            for dev in dr.async_entries_for_config_entry(dev_reg, eid):
-                mfg = _clean_str(dev.manufacturer)
-                mdl = _clean_str(dev.model)
-                if mdl:
-                    if mfg and mfg.lower() not in mdl.lower():
-                        models.append(f"{mfg} {mdl}")
-                    else:
-                        models.append(mdl)
-                elif mfg:
-                    models.append(mfg)
+            matched_devs.extend(dr.async_entries_for_config_entry(dev_reg, eid))
 
-                sw = _clean_str(dev.sw_version)
-                if sw:
-                    sw_versions.append(sw)
-                hw = _clean_str(dev.hw_version)
-                if hw:
-                    hw_versions.append(hw)
+        # Fallback for MQTT/hybrid integrations (e.g. valetudo) whose devices
+        # live under another config entry (e.g. mqtt) with manufacturer==domain
+        if not matched_devs:
+            for dev in dev_reg.devices.values():
+                if _is_generic_device(dev):
+                    continue
+                mfg_low = (dev.manufacturer or "").strip().lower()
+                if mfg_low == domain or any(
+                    domain in str(ident).lower() for ident in dev.identifiers
+                ):
+                    matched_devs.append(dev)
+
+        primary_devs = [
+            d
+            for d in matched_devs
+            if (d.sw_version or d.hw_version) and not _is_generic_device(d)
+        ]
+        chosen_devs = primary_devs or [
+            d for d in matched_devs if not _is_generic_device(d)
+        ]
+        for dev in chosen_devs:
+            formatted = _format_device_model(dev)
+            if formatted:
+                models.append(formatted)
+            sw = _clean_str(dev.sw_version)
+            if sw:
+                sw_versions.append(sw)
+            hw = _clean_str(dev.hw_version)
+            if hw:
+                hw_versions.append(hw)
     except Exception as err:
         LOGGER.debug("Device registry lookup failed for %s: %s", domain, err)
 

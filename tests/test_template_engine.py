@@ -279,12 +279,20 @@ body:
         model="S7 MaxV",
         sw_version="2025.02.0",
     )
+    # Also test OpenWrt with noisy tracked sub-devices alongside the primary router
+    dev_reg.async_get_or_create(
+        config_entry_id=openwrt_entry.entry_id,
+        identifiers={("openwrt", "radio_1")},
+        manufacturer="OpenWrt",
+        model="Wireless Radio",
+    )
     dev_reg.async_get_or_create(
         config_entry_id=openwrt_entry.entry_id,
         identifiers={("openwrt", "router_1")},
         manufacturer="GL.iNet",
         model="GL-MT6000",
         sw_version="24.10.0",
+        hw_version="glinet,gl-mt6000",
     )
 
     openwrt_yml = """
