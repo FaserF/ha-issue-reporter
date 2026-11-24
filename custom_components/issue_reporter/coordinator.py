@@ -59,6 +59,7 @@ from .discovery import (
 from .filters import ErrorFilter
 from .github_client import GitHubAPIError, GitHubClient
 from .log_monitor import (
+    IN_REPORTER_PIPELINE,
     IntegrationLogHandler,
     async_fetch_core_logs,
     async_poll_addon_logs,
@@ -270,6 +271,14 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_process_event(self, event: LogEvent) -> str:
         """Filter, redact, deduplicate, template, guard, and route a LogEvent."""
+        token = IN_REPORTER_PIPELINE.set(True)
+        try:
+            return await self._async_process_event_inner(event)
+        finally:
+            IN_REPORTER_PIPELINE.reset(token)
+
+    async def _async_process_event_inner(self, event: LogEvent) -> str:
+        """Inner event processing pipeline protected by re-entrancy guard."""
         target = self.targets.get(event.target_key)
         if target is None or not target.enabled or not target.full_repo:
             return "target_disabled"

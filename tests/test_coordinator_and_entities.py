@@ -126,8 +126,8 @@ async def test_full_pipeline_sensors_services_diagnostics_and_health(
     assert len(sensor_states) == 5  # 6th (github_api_remaining) is disabled_by_default!
     monitored = hass.states.get("sensor.issue_reporter_monitored_targets")
     assert monitored is not None
-    # FaserF integrations (openwrt, aegisbot) + FaserF add-ons (entramirror, dbf) = 4
-    assert int(monitored.state) == 4
+    # FaserF integrations (issue_reporter, openwrt, aegisbot) + FaserF add-ons (entramirror, dbf) = 5
+    assert int(monitored.state) == 5
 
     # 1. Test redaction service
     red_resp = await hass.services.async_call(
@@ -242,7 +242,7 @@ async def test_full_pipeline_sensors_services_diagnostics_and_health(
     diag = await async_get_config_entry_diagnostics(hass, entry)
     assert "ghp_super_secret_token_value" not in str(diag)
     health = await async_system_health_info(hass)
-    assert health["monitored_integrations"] == 2
+    assert health["monitored_integrations"] == 3
     assert health["monitored_addons"] == 2
     assert health["issues_created"] == 2
 

@@ -20,7 +20,6 @@ from .const import (
     DEFAULT_DRY_RUN,
     DEFAULT_INCLUDE_CORE_ADDONS,
     DEFAULT_MIN_SEVERITY,
-    DOMAIN,
     LOGGER,
     MODE_APPROVAL,
     MODE_AUTO,
@@ -101,8 +100,6 @@ async def async_discover_integrations(hass: HomeAssistant) -> list[TargetInfo]:
         return []
 
     for domain, integration in sorted(custom.items()):
-        if domain == DOMAIN:
-            continue
         manifest = getattr(integration, "manifest", {}) or {}
         name = str(manifest.get("name") or domain)
         version = str(manifest.get("version") or "0.0.0")

@@ -7,6 +7,7 @@ import logging
 from collections import deque
 
 from custom_components.issue_reporter.log_monitor import (
+    IN_REPORTER_PIPELINE,
     IntegrationLogHandler,
     parse_addon_log_lines,
     parse_core_log_lines,
@@ -26,22 +27,45 @@ async def test_integration_log_handler_fast_path_and_frame_blame() -> None:
     handler = IntegrationLogHandler(loop, on_event)
     handler.update_targets(
         {
+            "integration:issue_reporter": logging.ERROR,
             "integration:aegisbot": logging.WARNING,
             "integration:openwrt": logging.ERROR,
         }
     )
 
-    # 1. Self-loop prevention
+    # 1a. Self-monitoring captures genuine errors from issue_reporter
     self_rec = logging.LogRecord(
-        "custom_components.issue_reporter.coordinator",
+        "custom_components.issue_reporter.discovery",
         logging.ERROR,
         __file__,
         10,
-        "Internal error",
+        "Unexpected discovery bug",
         None,
         None,
     )
     handler.emit(self_rec)
+    assert len(handler.queue) == 1
+    assert handler.queue[0].target_key == "integration:issue_reporter"
+    handler.queue.clear()
+
+    # 1b. Self-loop prevention: pipeline re-entrancy guard & loop-breaker messages
+    token = IN_REPORTER_PIPELINE.set(True)
+    try:
+        handler.emit(self_rec)
+    finally:
+        IN_REPORTER_PIPELINE.reset(token)
+    assert len(handler.queue) == 0
+
+    leak_rec = logging.LogRecord(
+        "custom_components.issue_reporter.coordinator",
+        logging.ERROR,
+        __file__,
+        12,
+        "Pre-flight Leak Guard aborted issue creation",
+        None,
+        None,
+    )
+    handler.emit(leak_rec)
     assert len(handler.queue) == 0
 
     # 2. Below target severity (WARNING on ERROR-only openwrt)

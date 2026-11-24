@@ -75,9 +75,10 @@ async def test_discover_integrations_and_addons_separately(
         integrations = await async_discover_integrations(hass)
         addons = await async_discover_addons(hass, github, include_core=False)
 
-    # Integrations exclude issue_reporter itself
+    # Integrations include issue_reporter itself for out-of-the-box self-reporting
     int_map = {t.target_key: t for t in integrations}
-    assert "integration:issue_reporter" not in int_map
+    assert "integration:issue_reporter" in int_map
+    assert int_map["integration:issue_reporter"].full_repo == "FaserF/ha-issue-reporter"
     assert int_map["integration:openwrt"].full_repo == "FaserF/ha-openwrt"
     assert int_map["integration:localtuya"].full_repo == "xZetsubou/hass-localtuya"
 

@@ -10,6 +10,7 @@ import re
 import traceback as tb_mod
 from collections import deque
 from collections.abc import Callable
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,7 +18,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.hassio import is_hassio
 
 from .const import (
-    DOMAIN,
     LOGGER,
     MAX_LOG_CHARS,
     MAX_LOG_QUEUE_SIZE,
@@ -27,6 +27,10 @@ from .const import (
     TARGET_INTEGRATION,
 )
 from .models import LogEvent, TargetInfo
+
+IN_REPORTER_PIPELINE: ContextVar[bool] = ContextVar(
+    "issue_reporter_in_pipeline", default=False
+)
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CUSTOM_LOGGER_RE = re.compile(r"^custom_components\.([a-z0-9_]+)(?:\.|$)")
@@ -137,7 +141,7 @@ def _resolve_domain_from_record(record: logging.LogRecord, message: str) -> str 
                 parts = frame.filename.replace("\\", "/").split("/custom_components/")
                 if len(parts) > 1:
                     dom = parts[1].split("/", 1)[0]
-                    if dom and dom != DOMAIN:
+                    if dom:
                         return dom
     return None
 
@@ -167,9 +171,7 @@ class IntegrationLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         """Fast-path filter and enqueue matching custom integration events."""
-        if record.levelno < self._min_global_level:
-            return
-        if record.name.startswith(f"custom_components.{DOMAIN}"):
+        if record.levelno < self._min_global_level or IN_REPORTER_PIPELINE.get():
             return
 
         try:
@@ -177,8 +179,20 @@ class IntegrationLogHandler(logging.Handler):
         except Exception:
             message = str(record.msg)
 
+        # Loop-breaker: never self-report issue_reporter submission/guard meta-errors
+        if record.name.startswith("custom_components.issue_reporter") and any(
+            skip in message
+            for skip in (
+                "Pre-flight Leak Guard aborted",
+                "Failed creating issue on",
+                "Failed posting version comment",
+                "Error draining integration log queue",
+            )
+        ):
+            return
+
         domain = _resolve_domain_from_record(record, message)
-        if not domain or domain == DOMAIN:
+        if not domain:
             return
 
         target_key = f"{TARGET_INTEGRATION}:{domain}"
@@ -260,7 +274,7 @@ def parse_core_log_lines(
                 blame = _BLAME_INTEGRATION_RE.search(msg)
                 if blame:
                     domain = blame.group(1) or blame.group(2)
-            if not domain or domain == DOMAIN:
+            if not domain:
                 continue
             target_key = f"{TARGET_INTEGRATION}:{domain}"
             req_level = active_levels.get(target_key)
