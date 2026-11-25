@@ -26,11 +26,13 @@ from .models import DuplicateMatch, LogEvent, TargetInfo
 _VOLATILE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
-            r"\b\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b"
+            r"\b\d{4}[-/]\d{2}[-/]\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?\b"
         ),
         "<TS>",
     ),
     (re.compile(r"\[REDACTED_[A-Z_]+\]"), "<REDACT>"),
+    (re.compile(r"\b\d+#\d+\b"), "<PID>"),
+    (re.compile(r"(?<= )\*\d+\b"), "<CONN>"),
     (re.compile(r"\b0x[0-9a-fA-F]+\b"), "<HEX>"),
     (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b"), "<IP>"),
     (re.compile(r"\b\d{4,}\b"), "<NUM>"),

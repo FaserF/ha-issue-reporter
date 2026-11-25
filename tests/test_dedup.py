@@ -199,3 +199,21 @@ async def test_duplicate_detection_exact_fuzzy_comment_and_regression() -> None:
     res4 = await async_check_github_duplicate(github, t_newer, ev, fp, {})
     assert res4.action == "regression_new"
     assert res4.issue_number == 19
+
+
+def test_fingerprint_normalizes_nginx_pids_connections_and_slash_ts() -> None:
+    """Slash timestamps, PID#TID, and nginx *conn IDs must produce identical fingerprints."""
+    t = _target()
+    fp1 = compute_fingerprint(
+        t,
+        _event(
+            "2026/11/25 16:31:02 [error] 567#567: *1410 upstream timed out while reading response"
+        ),
+    )
+    fp2 = compute_fingerprint(
+        t,
+        _event(
+            "2026/11/25 16:31:16 [error] 566#566: *1412 upstream timed out while reading response"
+        ),
+    )
+    assert fp1 == fp2

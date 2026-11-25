@@ -123,3 +123,70 @@ def test_filter_toggles_and_custom_patterns() -> None:
     assert not flt.should_ignore(
         _event("integration:other", "An expected noisy warning happened")
     )[0]
+
+
+def test_real_ha_draft_false_positives_ignored() -> None:
+    """Verify transient nginx, integration timeout, and Baileys drop samples are filtered."""
+    flt = ErrorFilter({})
+
+    false_positives = [
+        (
+            "addon:edfe50eb_nginx",
+            "2026/11/24 16:47:42 [info] 572#572: *142 SSL_write() failed (SSL: error:80000068:system library::Connection reset by peer) (104: Connection reset by peer)",
+        ),
+        (
+            "addon:edfe50eb_nginx",
+            "2026/11/24 17:50:11 [error] 573#573: *195 upstream prematurely closed connection while sending to client",
+        ),
+        (
+            "addon:edfe50eb_nginx",
+            '2026/11/25 16:31:02 [error] 567#567: *1410 open() "/var/lib/nginx/html/tv/file.mkv" failed (2: No such file or directory)',
+        ),
+        (
+            "addon:edfe50eb_paseo",
+            "2026/11/25 12:13:11 [error] 386#386: *1 connect() failed (111: Connection refused) while connecting to upstream",
+        ),
+        (
+            "integration:shielddns",
+            "Error fetching shielddns ([REDACTED_SECRET]:443) data: Error communicating with API ([REDACTED_SECRET])",
+        ),
+        (
+            "addon:edfe50eb_shielddns",
+            'Network error contacting primary: Get "http://[REDACTED_HOST]:9443/api/cluster/replicas": dial tcp 10.0.0.1:9443: i/o timeout',
+        ),
+        (
+            "integration:aegisbot",
+            "Error fetching aegisbot data: Error communicating with API: Timeout error fetching information",
+        ),
+        (
+            "integration:headscale",
+            "Error fetching headscale data: Error communicating with Headscale: [Errno 1] [SSL: RECORD_LAYER_FAILURE]",
+        ),
+        (
+            "integration:headscale",
+            "Timeout fetching headscale data",
+        ),
+        (
+            "integration:phoenix_bad",
+            "Failed to fetch Sauna data: Request timeout",
+        ),
+        (
+            "addon:edfe50eb_whatsapp",
+            "stream errored out",
+        ),
+        (
+            "addon:edfe50eb_whatsapp",
+            "error in sending keep alive",
+        ),
+        (
+            "addon:edfe50eb_whatsapp",
+            "timed out waiting for message",
+        ),
+        (
+            "addon:edfe50eb_whatsapp",
+            "❌ WhatsApp server rejected message with error: 479",
+        ),
+    ]
+    for target_key, msg in false_positives:
+        ignored, _reason = flt.should_ignore(_event(target_key, msg))
+        assert ignored is True, f"Expected false positive to be filtered: {msg}"

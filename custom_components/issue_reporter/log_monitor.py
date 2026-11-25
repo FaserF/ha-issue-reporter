@@ -53,7 +53,7 @@ _TS_PREFIX = (
     r"(?:\[\d{2}:\d{2}:\d{2}\]\s+)?"
 )
 _ADDON_BENIGN_LEVEL_RE = re.compile(
-    rf"^{_TS_PREFIX}(?:[A-Za-z0-9_.-]+:\s+)?"
+    rf"^(?:\[[A-Za-z0-9_.-]+\]\s+)?{_TS_PREFIX}(?:[A-Za-z0-9_.-]+:\s+)?"
     r"(?:\[(?:info|notice|debug|trace)\]|"
     r"(?:INFO|NOTICE|DEBUG|TRACE)\s*[:|-]|"
     r"\b(?:INFO|NOTICE|DEBUG|TRACE)\b(?:\s|$))",

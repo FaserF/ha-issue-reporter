@@ -55,6 +55,26 @@ NETWORK_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"Timeout connecting to\b|timed out while\b|\[Errno (?:101|104|110|111|113)\]",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\((?:101|104|110|111|113):\s*(?:Connection reset|Connection refused|Connection timed out|No route to host|Network is unreachable)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"SSL_(?:write|read|do_handshake)\(\)\s+failed|SSL:\s*RECORD_LAYER_FAILURE|upstream prematurely closed connection|while connecting to upstream|while sending to client",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'open\(\)\s+"[^"]+"\s+failed\s+\(2:\s*No such file or directory\)',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:Error|Timeout(?:\s+error)?)\s+(?:communicating with|connecting to|fetching)\b|\bRequest timeout\b|\bConnection timeout\b|\bi/o timeout\b|\bdial tcp\b|Network error contacting\b|\bTimeout fetching\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\berror in sending keep\s*alive\b|\btimed out waiting for message\b|\bstream errored out\b|WhatsApp server rejected message with error:\s*\d+\b",
+        re.IGNORECASE,
+    ),
 )
 
 AUTH_PATTERNS: tuple[re.Pattern[str], ...] = (

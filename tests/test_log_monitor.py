@@ -280,3 +280,11 @@ def test_addon_log_nginx_info_ignored_and_unprefixed_error_captured() -> None:
     assert len(events) == 1
     assert events[0].severity == "ERROR"
     assert "Gateway status check failed: connection refused" in events[0].message
+
+    component_prefixed = parse_addon_log_lines(
+        target,
+        "[nginx] 2026/11/24 10:15:30 [info] 42#42: *123 SSL_write() failed",
+        logging.ERROR,
+        deque(maxlen=20),
+    )
+    assert component_prefixed == []
