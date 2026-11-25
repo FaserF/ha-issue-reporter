@@ -415,3 +415,94 @@ async def test_retry_outbox_and_flood_breaker(
     assert tripped is True
     assert coord.store.is_target_flood_paused("integration:openwrt") is True
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_startup_deprecation_threshold_and_monorepo_rate_limit(
+    hass,
+    mock_custom_components,
+    mock_supervisor_client,
+) -> None:
+    """Verify 1x deprecation threshold and per-target monorepo daily quotas."""
+    entry = await _setup_integration(
+        hass, mock_custom_components, mock_supervisor_client, dry_run=True
+    )
+    coord = entry.runtime_data
+    coord.targets["integration:aegisbot"].min_severity = "WARNING"
+    coord.targets["integration:aegisbot"].latest_version = "1.0.3"
+    coord.github.async_get_latest_release = AsyncMock(return_value="1.0.3")
+    coord.github.async_get_repo_issues = AsyncMock(return_value=([], False))
+    coord.github.async_fetch_bug_templates = AsyncMock(return_value=[])
+
+    # 1. Normal WARNING still requires 3 occurrences
+    normal_warn = LogEvent(
+        target_key="integration:aegisbot",
+        kind="integration",
+        logger_name="custom_components.aegisbot.coordinator",
+        severity="WARNING",
+        levelno=logging.WARNING,
+        message="Normal non-deprecation warning",
+    )
+    assert await coord._async_process_event(normal_warn) == "below_threshold"
+
+    # 2. Deterministic HA Core frame deprecation warning reports on 1st occurrence
+    frame_dep = LogEvent(
+        target_key="integration:aegisbot",
+        kind="integration",
+        logger_name="homeassistant.helpers.frame",
+        severity="WARNING",
+        levelno=logging.WARNING,
+        message="Detected that custom integration 'aegisbot' calls deprecated via_device",
+    )
+    assert await coord._async_process_event(frame_dep) == "dry_run_draft"
+
+    # 3. config_entries deprecation notice also reports on 1st occurrence
+    ce_dep = LogEvent(
+        target_key="integration:aegisbot",
+        kind="integration",
+        logger_name="homeassistant.config_entries",
+        severity="WARNING",
+        levelno=logging.WARNING,
+        message="Custom integration 'aegisbot' is using deprecated async_forward_entry_setup",
+    )
+    assert await coord._async_process_event(ce_dep) == "dry_run_draft"
+
+    # 4. Monorepo per-target daily rate limit does not starve sibling add-ons
+    coord.targets["addon:edfe50eb_entramirror"].is_monorepo = True
+    coord.targets["addon:605cee21_dbf"].is_monorepo = True
+    for _ in range(2):
+        coord.store.record_post_rate(
+            "FaserF/hassio-addons", target_key="addon:edfe50eb_entramirror"
+        )
+
+    # Noisy add-on itself is capped at 2/day
+    assert (
+        coord.store.within_rate_limits(
+            "FaserF/hassio-addons",
+            target_key="addon:edfe50eb_entramirror",
+            is_monorepo=True,
+        )
+        is False
+    )
+    # Unrelated sibling add-on in the same monorepo is NOT starved
+    assert (
+        coord.store.within_rate_limits(
+            "FaserF/hassio-addons",
+            target_key="addon:605cee21_dbf",
+            is_monorepo=True,
+        )
+        is True
+    )
+    # Non-monorepo repo still enforces per-repo daily cap of 2
+    for _ in range(2):
+        coord.store.record_post_rate(
+            "FaserF/ha-openwrt", target_key="integration:openwrt"
+        )
+    assert (
+        coord.store.within_rate_limits(
+            "FaserF/ha-openwrt",
+            target_key="integration:openwrt",
+            is_monorepo=False,
+        )
+        is False
+    )
+    await hass.config_entries.async_unload(entry.entry_id)

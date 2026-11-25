@@ -34,6 +34,7 @@ from .const import (
     DEFAULT_ALLOW_DEV_EDGE,
     DEFAULT_DRY_RUN,
     DEFAULT_INCLUDE_CORE_ADDONS,
+    DEFAULT_MIN_OCCURRENCES_DEPRECATION,
     DEFAULT_MIN_OCCURRENCES_ERROR,
     DEFAULT_MIN_OCCURRENCES_WARNING,
     DEFAULT_SKIP_OUTDATED,
@@ -79,6 +80,25 @@ from .submission import (
     async_submit_issue,
 )
 from .template_engine import IssueTemplateEngine
+
+
+def _is_deterministic_deprecation_warning(event: LogEvent) -> bool:
+    """Return True for deterministic HA Core deprecation warnings needing 1x reporting."""
+    logger = (event.logger_name or "").lower()
+    if logger.startswith("homeassistant.helpers.frame"):
+        return True
+    if logger.startswith("homeassistant.config_entries"):
+        msg = (event.message or "").lower()
+        return any(
+            kw in msg
+            for kw in (
+                "deprecat",
+                "will stop working",
+                "will be removed",
+                "detected that custom integration",
+            )
+        )
+    return False
 
 
 class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -137,8 +157,8 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except GitHubAuthError as err:
             LOGGER.warning("GitHub initialization warning: %s", err)
 
-        await self.redactor.async_refresh_secrets(self.hass)
         await self.async_refresh_discovery()
+        await self.redactor.async_refresh_secrets(self.hass)
 
         logging.getLogger().addHandler(self._log_handler)
         self._handler_attached = True
@@ -220,6 +240,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         owner = self.auth.get_authenticated_owner()
         self.targets = apply_target_policies(integrations + addons, self.config, owner)
+        self.redactor.set_public_targets(self.targets.values(), owner=owner)
         self._log_handler.update_targets(self._integration_min_levels())
         self._last_discovery_at = datetime.now(UTC)
 
@@ -273,8 +294,8 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_scan_now(self) -> dict[str, Any]:
         """Force immediate discovery, secret refresh, and log scan."""
-        await self.redactor.async_refresh_secrets(self.hass)
         await self.async_refresh_discovery()
+        await self.redactor.async_refresh_secrets(self.hass)
         return await self._async_update_data()
 
     async def _async_process_event(self, event: LogEvent) -> str:
@@ -358,23 +379,29 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return "flood_paused"
 
         occurrences, first_seen, last_seen = self.store.record_occurrence(fp)
-        threshold = (
-            int(
-                self.config.get(
-                    CONF_MIN_OCCURRENCES_WARNING, DEFAULT_MIN_OCCURRENCES_WARNING
+        if sanitized_event.levelno < 40:
+            if _is_deterministic_deprecation_warning(sanitized_event):
+                threshold = DEFAULT_MIN_OCCURRENCES_DEPRECATION
+            else:
+                threshold = int(
+                    self.config.get(
+                        CONF_MIN_OCCURRENCES_WARNING, DEFAULT_MIN_OCCURRENCES_WARNING
+                    )
                 )
-            )
-            if sanitized_event.levelno < 40
-            else int(
+        else:
+            threshold = int(
                 self.config.get(
                     CONF_MIN_OCCURRENCES_ERROR, DEFAULT_MIN_OCCURRENCES_ERROR
                 )
             )
-        )
         if occurrences < max(1, threshold):
             return "below_threshold"
 
-        if not self.store.within_rate_limits(target.full_repo):
+        if not self.store.within_rate_limits(
+            target.full_repo,
+            target_key=target.target_key,
+            is_monorepo=target.is_monorepo,
+        ):
             self.stats.rate_limited_suppressed += 1
             self.store.dirty = True
             return "rate_limited"
@@ -507,7 +534,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.stats.issues_created += 1
         self.stats.last_issue_url = str(created.get("html_url") or "") or None
         self.store.set_cooldown(draft.fingerprint)
-        self.store.record_post_rate(draft.repo)
+        self.store.record_post_rate(draft.repo, target_key=draft.target_key)
         await self.store.async_save()
         self.async_set_updated_data(self._build_snapshot())
         return created

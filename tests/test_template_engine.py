@@ -327,8 +327,20 @@ body:
     github = MagicMock()
     github.async_fetch_bug_templates = AsyncMock(
         side_effect=[
-            [{"name": "bug_report.yml", "path": ".github/ISSUE_TEMPLATE/bug_report.yml", "content": valetudo_yml}],
-            [{"name": "bug_report.yml", "path": ".github/ISSUE_TEMPLATE/bug_report.yml", "content": openwrt_yml}],
+            [
+                {
+                    "name": "bug_report.yml",
+                    "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+                    "content": valetudo_yml,
+                }
+            ],
+            [
+                {
+                    "name": "bug_report.yml",
+                    "path": ".github/ISSUE_TEMPLATE/bug_report.yml",
+                    "content": openwrt_yml,
+                }
+            ],
         ]
     )
     engine = IssueTemplateEngine(github)
@@ -412,4 +424,3 @@ body:
     assert "### Connection Method\n\nubus" in r_ow.body
     assert "### Diagnostics\n\n- Home Assistant Core:" in r_ow.body
     assert "Detected Device / Model: `GL.iNet GL-MT6000`" in r_ow.body
-

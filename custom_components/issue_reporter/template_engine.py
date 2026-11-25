@@ -255,8 +255,7 @@ def _resolve_field_value(
             )
         if "variant" in fid or "variant" in label_low:
             return label, (
-                ctx["variant"]
-                or "_Not automatically detected (automated log report)_"
+                ctx["variant"] or "_Not automatically detected (automated log report)_"
             )
         if any(
             k in fid or k in label_low
@@ -268,8 +267,7 @@ def _resolve_field_value(
             )
         if any(k in fid or k in label_low for k in ("plan", "tier")):
             return label, (
-                ctx["plan"]
-                or "_Not automatically detected (automated log report)_"
+                ctx["plan"] or "_Not automatically detected (automated log report)_"
             )
         if "num_departures" in fid or "number of departures" in label_low:
             return label, (

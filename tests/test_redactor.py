@@ -134,3 +134,97 @@ async def test_leak_guard_fail_closed_aborts_unredacted_secrets(hass) -> None:
     )
     assert ok4 is True
     assert reasons4 == []
+
+
+async def test_public_owner_repo_not_harvested_and_template_urls_allowed(
+    hass, tmp_path: Path
+) -> None:
+    """Public GitHub owners/repos/domains must never trigger Leak Guard false positives."""
+    from custom_components.issue_reporter.models import TargetInfo
+
+    entry = MockConfigEntry(
+        domain="openwrt",
+        data={
+            "github_user": "FaserF",
+            "username": "faserf",
+            "github_repo": "FaserF/ha-openwrt",
+            "repository": "https://github.com/FaserF/hassio-addons",
+            "repo_url": "https://github.com/FaserF/ha-openwrt",
+            "api_key": "ActualRealSecretValue999",
+            "account": {"owner": "faserf", "github_repo": "FaserF/ha-aegisbot"},
+        },
+        options={"integration_name": "openwrt", "domain": "openwrt"},
+    )
+    entry.add_to_hass(hass)
+
+    secrets_file = tmp_path / "secrets.yaml"
+    secrets_file.write_text("dummy_secret: RealYamlSecretValue!\n", encoding="utf-8")
+
+    redactor = PrivacyRedactor(
+        {
+            "github_user": "FaserF",
+            CONF_CUSTOM_REDACTIONS: ["my-private-domain.example"],
+            CONF_STRICT_ENTROPY_GUARD: True,
+        }
+    )
+    redactor.set_public_targets(
+        [
+            TargetInfo(
+                target_key="integration:openwrt",
+                kind="integration",
+                identifier="openwrt",
+                short_name="openwrt",
+                name="OpenWrt",
+                version="2.5.7",
+                repo_owner="FaserF",
+                repo_name="ha-openwrt",
+                repo_url="https://github.com/FaserF/ha-openwrt",
+                enabled=True,
+            )
+        ],
+        owner="FaserF",
+    )
+
+    with (
+        patch.object(hass.config, "path", return_value=str(secrets_file)),
+        patch(
+            "custom_components.issue_reporter.redactor.is_hassio", return_value=False
+        ),
+    ):
+        await redactor.async_refresh_secrets(hass)
+
+    assert "FaserF" not in redactor._harvested_literals
+    assert "faserf" not in redactor._harvested_literals
+    assert "FaserF/ha-openwrt" not in redactor._harvested_literals
+    assert "https://github.com/FaserF/hassio-addons" not in redactor._harvested_literals
+    assert "openwrt" not in redactor._harvested_literals
+    assert "ActualRealSecretValue999" in redactor._harvested_literals
+
+    # Public GitHub URLs injected by template_engine must pass verify_no_leaks
+    body = (
+        "Reported for https://github.com/FaserF/ha-openwrt by faserf.\n"
+        "---\n"
+        "*Reported automatically by [ha-issue-reporter](https://github.com/FaserF/ha-issue-reporter).*"
+    )
+    ok, reasons = redactor.verify_no_leaks("[Bug]: Error in openwrt", body)
+    assert ok is True
+    assert reasons == []
+
+    # Real secrets, custom redactions, and private keys must STILL fail closed
+    ok_sec, reasons_sec = redactor.verify_no_leaks(
+        "Title", "Leaked ActualRealSecretValue999"
+    )
+    assert ok_sec is False
+    assert "harvested_secret_survived" in reasons_sec
+
+    ok_cust, reasons_cust = redactor.verify_no_leaks(
+        "Title", "Host my-private-domain.example failed"
+    )
+    assert ok_cust is False
+    assert "custom_redaction_survived" in reasons_cust
+
+    ok_pk, reasons_pk = redactor.verify_no_leaks(
+        "Title", "-----BEGIN RSA PRIVATE KEY-----\nabc"
+    )
+    assert ok_pk is False
+    assert "pattern_survived:private_key_marker" in reasons_pk

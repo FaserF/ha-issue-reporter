@@ -1,0 +1,309 @@
+"""Static regex rules, keyword lists, and stopwords for PrivacyRedactor."""
+
+from __future__ import annotations
+
+import re
+
+SENSITIVE_KEY_KEYWORDS: tuple[str, ...] = (
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "key",
+    "auth",
+    "cookie",
+    "session",
+    "bearer",
+    "pin",
+    "passphrase",
+    "webhook",
+    "email",
+    "mail",
+    "phone",
+    "mobile",
+    "username",
+    "user",
+    "login",
+    "host",
+    "hostname",
+    "ip",
+    "url",
+    "uri",
+    "endpoint",
+    "dsn",
+    "cert",
+    "private",
+    "client_id",
+    "client_secret",
+    "iban",
+    "account",
+    "latitude",
+    "longitude",
+    "lat",
+    "lon",
+)
+
+SAFE_HARVEST_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "true",
+        "false",
+        "none",
+        "null",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "homeassistant",
+        "home-assistant",
+        "default",
+        "stable",
+        "warning",
+        "error",
+        "critical",
+        "debug",
+        "info",
+        "https",
+        "http",
+        "github.com",
+        "api.github.com",
+        "devices",
+        "device",
+        "problem",
+        "version",
+        "assistant",
+        "running",
+        "causing",
+        "information",
+        "installation",
+        "summary",
+        "severity",
+        "channel",
+        "logger",
+        "automated",
+        "integration",
+        "entities",
+        "entity",
+        "sensor",
+        "update",
+    }
+)
+
+PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
+    {
+        "[REDACTED_SECRET]",
+        "[REDACTED_TOKEN]",
+        "[REDACTED_PRIVATE_KEY]",
+        "[REDACTED_CRED]",
+        "[REDACTED_HOST]",
+        "[REDACTED_EMAIL]",
+        "[REDACTED_PHONE]",
+        "[REDACTED_IBAN]",
+        "[REDACTED_IP]",
+        "[REDACTED_MAC]",
+        "[REDACTED_GPS]",
+        "[REDACTED_UUID]",
+        "[REDACTED_PATH]",
+        "[REDACTED_CUSTOM]",
+    }
+)
+
+SCRUBBER_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "private_key",
+        re.compile(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            re.MULTILINE,
+        ),
+        "[REDACTED_PRIVATE_KEY]",
+    ),
+    (
+        "github_token",
+        re.compile(
+            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,255}\b|\bgithub_pat_[A-Za-z0-9_]{20,255}\b"
+        ),
+        "[REDACTED_TOKEN]",
+    ),
+    (
+        "jwt",
+        re.compile(
+            r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
+        ),
+        "[REDACTED_TOKEN]",
+    ),
+    (
+        "known_api_token",
+        re.compile(
+            r"\b(?:sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|\d{8,10}:[A-Za-z0-9_-]{35})\b"
+        ),
+        "[REDACTED_TOKEN]",
+    ),
+    (
+        "auth_header",
+        re.compile(
+            r"((?:Authorization|X-Api-Key|X-Auth-Token|Cookie|Set-Cookie)\s*[:=]\s*(?:Bearer|Basic|Token)?\s*)([^\r\n;\"']+)",
+            re.IGNORECASE,
+        ),
+        r"\1[REDACTED_TOKEN]",
+    ),
+    (
+        "bearer_inline",
+        re.compile(r"(\bBearer\s+)([A-Za-z0-9._~+/=-]{8,})", re.IGNORECASE),
+        r"\1[REDACTED_TOKEN]",
+    ),
+    (
+        "url_credentials",
+        re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]*://)([^:@/\s]+):([^@/\s]+)@"),
+        r"\1[REDACTED_CRED]@",
+    ),
+    (
+        "kv_secret",
+        re.compile(
+            r"((?:password|passwd|pwd|secret|token|api[_-]?key|access_token|refresh_token|client_secret|pin|passphrase|session_id|session_token|cookie)\s*[:=]\s*['\"]?)([^\s'\",;}\]]+)",
+            re.IGNORECASE,
+        ),
+        r"\1[REDACTED_SECRET]",
+    ),
+    (
+        "private_domain",
+        re.compile(
+            r"\b[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9-]+)*\.(?:tailnet\.[a-zA-Z0-9.-]+|ts\.net|local|lan|home\.arpa|internal|fritz\.box)\b",
+            re.IGNORECASE,
+        ),
+        "[REDACTED_HOST]",
+    ),
+    (
+        "email_full",
+        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+        "[REDACTED_EMAIL]",
+    ),
+    (
+        "email_partial",
+        re.compile(r"(?<=[\s>:(])[A-Za-z0-9][A-Za-z0-9._%+-]{2,}@(?=\s|$|[,;)\]])"),
+        "[REDACTED_EMAIL]",
+    ),
+    (
+        "phone_e164",
+        re.compile(r"(?<!\w)\+[1-9]\d{1,2}[\s.-]?\d{2,4}[\s.-]?\d{3,10}\b"),
+        "[REDACTED_PHONE]",
+    ),
+    (
+        "iban",
+        re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
+        "[REDACTED_IBAN]",
+    ),
+    (
+        "ipv4",
+        re.compile(
+            r"(?<![vV\d.])\b(?!0\.0\.0\.0\b)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b(?![\d.])"
+        ),
+        "[REDACTED_IP]",
+    ),
+    (
+        "ipv6",
+        re.compile(
+            r"(?<![:\w])(?:[0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}(?![:\w])|(?<![:\w])(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F:]{1,20}(?![:\w])"
+        ),
+        "[REDACTED_IP]",
+    ),
+    (
+        "mac",
+        re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
+        "[REDACTED_MAC]",
+    ),
+    (
+        "gps",
+        re.compile(
+            r"((?:lat(?:itude)?|lon(?:gitude)?)\s*[:=]\s*['\"]?)(-?\d{1,3}\.\d{4,})",
+            re.IGNORECASE,
+        ),
+        r"\1[REDACTED_GPS]",
+    ),
+    (
+        "uuid",
+        re.compile(
+            r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+        ),
+        "[REDACTED_UUID]",
+    ),
+    (
+        "os_user_path",
+        re.compile(r"(?:/home/|/Users/|C:\\Users\\)([^/\\\s'\"]+)", re.IGNORECASE),
+        r"/home/[REDACTED_PATH]",
+    ),
+)
+
+LEAK_CHECK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("private_key_marker", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
+    (
+        "github_token",
+        re.compile(
+            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}"
+        ),
+    ),
+    (
+        "jwt",
+        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
+    ),
+    (
+        "bearer",
+        re.compile(r"\bBearer\s+(?!\[REDACTED)[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
+    ),
+    ("url_cred", re.compile(r"://[^:@/\s\[]+:[^@/\s\]]+@")),
+    (
+        "tailnet_host",
+        re.compile(r"\.(?:tailnet\.[a-zA-Z0-9.-]+|ts\.net)\b", re.IGNORECASE),
+    ),
+    (
+        "private_ip",
+        re.compile(
+            r"(?<![vV\d.])\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b(?![\d.])"
+        ),
+    ),
+)
+
+HIGH_ENTROPY_CANDIDATE_RE = re.compile(r"(?<![/\w.-])[A-Za-z0-9+/_=-]{28,}(?![\w./-])")
+PUBLIC_GITHUB_REPO_URL_RE = re.compile(
+    r"https?://(?:www\.)?github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:/(?:issues|pull|releases|blob|tree)/[^\s)>\"']*)?",
+    re.IGNORECASE,
+)
+
+NON_SENSITIVE_KEYS: frozenset[str] = frozenset(
+    {
+        "version",
+        "ha_version",
+        "domain",
+        "name",
+        "title",
+        "slug",
+        "channel",
+        "github_user",
+        "github_username",
+        "github_owner",
+        "github_repo",
+        "github_url",
+        "fallback_user",
+        "owner",
+        "owner_allowlist",
+        "repo",
+        "repo_owner",
+        "repo_name",
+        "repo_url",
+        "repository",
+        "repository_url",
+        "issue_tracker",
+        "documentation",
+        "homepage",
+        "source",
+        "source_url",
+        "integration",
+        "integration_name",
+        "component",
+        "addon",
+        "add_on",
+        "target_overrides",
+        "author",
+        "maintainer",
+    }
+)

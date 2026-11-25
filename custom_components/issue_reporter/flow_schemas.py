@@ -92,9 +92,7 @@ def build_general_schema(cfg: dict[str, Any]) -> vol.Schema:
             ): bool,
             vol.Required(
                 CONF_REQUIRE_APPROVAL,
-                default=bool(
-                    cfg.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
-                ),
+                default=bool(cfg.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)),
             ): bool,
             vol.Required(
                 CONF_MIN_SEVERITY,

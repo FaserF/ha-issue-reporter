@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_COOLDOWN_HOURS,
     DEFAULT_MAX_ISSUES_PER_DAY,
     DEFAULT_MAX_ISSUES_PER_HOUR,
+    DEFAULT_MAX_ISSUES_PER_MONOREPO_DAY,
     DEFAULT_MAX_ISSUES_PER_REPO_DAY,
     DEFAULT_OCCURRENCE_WINDOW_MINUTES,
     FLOOD_BREAKER_MAX_UNIQUE,
@@ -59,6 +60,7 @@ class ReporterStateStore:
         self.hourly_posts: list[str] = []
         self.daily_posts: list[str] = []
         self.repo_daily_posts: dict[str, list[str]] = {}
+        self.target_daily_posts: dict[str, list[str]] = {}
         self.occurrence_windows: dict[str, list[datetime]] = {}
         self.seen_addon_hashes: dict[str, deque[str]] = {}
         self.target_paused_until: dict[str, str] = {}
@@ -112,8 +114,14 @@ class ReporterStateStore:
         self.occurrence_windows[fp] = stamps
         return len(stamps), stamps[0].isoformat(), stamps[-1].isoformat()
 
-    def within_rate_limits(self, full_repo: str) -> bool:
-        """Enforce global hourly, global daily, and per-repo daily submission limits."""
+    def within_rate_limits(
+        self,
+        full_repo: str,
+        *,
+        target_key: str | None = None,
+        is_monorepo: bool = False,
+    ) -> bool:
+        """Enforce global hourly, global daily, and per-repo / per-target daily limits."""
         now = datetime.now(UTC)
         hour_ago = now - timedelta(hours=1)
         day_ago = now - timedelta(days=1)
@@ -134,12 +142,13 @@ class ReporterStateStore:
         if len(self.daily_posts) >= DEFAULT_MAX_ISSUES_PER_DAY:
             return False
 
+        repo_key = full_repo.lower()
         repo_list = [
             ts
-            for ts in self.repo_daily_posts.get(full_repo.lower(), [])
+            for ts in self.repo_daily_posts.get(repo_key, [])
             if _parse_iso(ts) >= day_ago
         ]
-        self.repo_daily_posts[full_repo.lower()] = repo_list
+        self.repo_daily_posts[repo_key] = repo_list
         max_repo_day = max(
             1,
             int(
@@ -148,6 +157,20 @@ class ReporterStateStore:
                 )
             ),
         )
+
+        if is_monorepo and target_key:
+            t_key = target_key.lower()
+            target_list = [
+                ts
+                for ts in self.target_daily_posts.get(t_key, [])
+                if _parse_iso(ts) >= day_ago
+            ]
+            self.target_daily_posts[t_key] = target_list
+            if len(target_list) >= max_repo_day:
+                return False
+            monorepo_cap = max(max_repo_day, DEFAULT_MAX_ISSUES_PER_MONOREPO_DAY)
+            return len(repo_list) < monorepo_cap
+
         return len(repo_list) < max_repo_day
 
     def is_submission_spaced(self) -> bool:
@@ -259,12 +282,19 @@ class ReporterStateStore:
             self.stats.retry_queue_size = len(self.retry_queue)
             self.dirty = True
 
-    def record_post_rate(self, full_repo: str) -> None:
+    def record_post_rate(
+        self,
+        full_repo: str,
+        *,
+        target_key: str | None = None,
+    ) -> None:
         """Record timestamp of a created GitHub issue or comment for rate limiting."""
         now_iso = datetime.now(UTC).isoformat()
         self.hourly_posts.append(now_iso)
         self.daily_posts.append(now_iso)
         self.repo_daily_posts.setdefault(full_repo.lower(), []).append(now_iso)
+        if target_key:
+            self.target_daily_posts.setdefault(target_key.lower(), []).append(now_iso)
         self.dirty = True
 
     def clear_cooldowns(self, target_key: str | None = None) -> None:
@@ -289,6 +319,9 @@ class ReporterStateStore:
         self.daily_posts = list(data.get("daily_posts") or [])
         self.repo_daily_posts = {
             str(k): list(v) for k, v in (data.get("repo_daily_posts") or {}).items()
+        }
+        self.target_daily_posts = {
+            str(k): list(v) for k, v in (data.get("target_daily_posts") or {}).items()
         }
         self.target_paused_until = {
             str(k): str(v) for k, v in (data.get("target_paused_until") or {}).items()
@@ -330,6 +363,7 @@ class ReporterStateStore:
             "hourly_posts": self.hourly_posts[-100:],
             "daily_posts": self.daily_posts[-200:],
             "repo_daily_posts": self.repo_daily_posts,
+            "target_daily_posts": self.target_daily_posts,
             "target_paused_until": self.target_paused_until,
             "retry_queue": {k: v.to_dict() for k, v in self.retry_queue.items()},
             "pending_drafts": {k: v.to_dict() for k, v in self.pending_drafts.items()},

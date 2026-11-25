@@ -182,3 +182,90 @@ def test_parse_addon_log_lines_json_pino_ansi_and_tracebacks() -> None:
 
     # Re-polling identical log lines produces 0 duplicate events
     assert parse_addon_log_lines(target, raw_logs, logging.ERROR, seen) == []
+
+
+async def test_resolve_domain_extended_core_loggers() -> None:
+    """Test _resolve_domain_from_record covers entity, components.*, and bootstrap."""
+    loop = asyncio.get_running_loop()
+    handler = IntegrationLogHandler(loop, lambda: None)
+    handler.update_targets(
+        {
+            "integration:aegisbot": logging.WARNING,
+            "integration:openwrt": logging.ERROR,
+            "integration:mcphub": logging.ERROR,
+        }
+    )
+
+    records = [
+        logging.LogRecord(
+            "homeassistant.helpers.entity",
+            logging.ERROR,
+            __file__,
+            10,
+            "Update for sensor.x fails on custom integration 'openwrt'",
+            None,
+            None,
+        ),
+        logging.LogRecord(
+            "homeassistant.components.sensor",
+            logging.ERROR,
+            __file__,
+            20,
+            "Error adding entities for domain sensor in custom_components.mcphub.sensor",
+            None,
+            None,
+        ),
+        logging.LogRecord(
+            "homeassistant.bootstrap",
+            logging.WARNING,
+            __file__,
+            30,
+            "Waiting on integrations to complete setup: custom integration 'aegisbot'",
+            None,
+            None,
+        ),
+    ]
+    for rec in records:
+        handler.emit(rec)
+
+    assert len(handler.queue) == 3
+    assert [ev.target_key for ev in handler.queue] == [
+        "integration:openwrt",
+        "integration:mcphub",
+        "integration:aegisbot",
+    ]
+
+
+def test_addon_log_nginx_info_ignored_and_unprefixed_error_captured() -> None:
+    """Ensure [info]/[notice]/[debug] lines aren't errors while unprefixed failures are."""
+    target = TargetInfo(
+        target_key="addon:edfe50eb_paseo",
+        kind="addon",
+        identifier="edfe50eb_paseo",
+        short_name="paseo",
+        name="Paseo",
+        version="0.3.2",
+        repo_owner="FaserF",
+        repo_name="hassio-addons",
+        repo_url="https://github.com/FaserF/hassio-addons",
+    )
+    seen: deque[str] = deque(maxlen=100)
+
+    raw_logs = "\n".join(
+        [
+            # Benign nginx [info] with SSL error: substring must NOT trigger ERROR
+            "2026/11/24 10:15:30 [info] 42#42: *123 SSL_write() failed (SSL: error:0A000126:SSL routines::unexpected eof while reading)",
+            "2026/11/24 10:15:31 [notice] 42#42: using the epoll event method",
+            "[debug] checking upstream error: none",
+            "2026-11-24 10:15:32 INFO: Gateway status check failed: ignored in info",
+            "Listening on port 8080",
+            "Integration tests failed: 0",
+            # Unprefixed genuine error line MUST be captured
+            "Gateway status check failed: connection refused",
+        ]
+    )
+
+    events = parse_addon_log_lines(target, raw_logs, logging.ERROR, seen)
+    assert len(events) == 1
+    assert events[0].severity == "ERROR"
+    assert "Gateway status check failed: connection refused" in events[0].message

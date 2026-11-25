@@ -258,9 +258,7 @@ def apply_target_policies(
         allowlist = set()
 
     global_dry_run = bool(config.get(CONF_DRY_RUN, DEFAULT_DRY_RUN))
-    require_approval = bool(
-        config.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
-    )
+    require_approval = bool(config.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL))
     default_severity = str(config.get(CONF_MIN_SEVERITY, DEFAULT_MIN_SEVERITY))
     raw_overrides = config.get(CONF_TARGET_OVERRIDES) or {}
 

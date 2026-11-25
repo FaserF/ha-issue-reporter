@@ -44,12 +44,33 @@ _CORE_LOG_LINE_RE = re.compile(
 _EXC_TYPE_RE = re.compile(
     r"\b([A-Z][A-Za-z0-9]+(?:Error|Exception|Warning|Timeout|Fault))\b"
 )
-_ADDON_TEXT_LEVEL_RE = re.compile(
-    r"(?:\[(CRITICAL|FATAL|ERROR|ERR|WARNING|WARN|PANIC)\]|"
-    r"\b(CRITICAL|FATAL|ERROR|WARNING|PANIC)\s*[:|-]|"
-    r"\s(CRITICAL|FATAL|ERROR|WARNING)\s)",
+_TS_PREFIX = (
+    r"(?:\[?\d{4}[-/]\d{2}[-/]\d{2}(?:[T\s]\d{2}:\d{2}:\d{2}"
+    r"(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?\]?\s+)?"
+    r"(?:\[\d{2}:\d{2}:\d{2}\]\s+)?"
+)
+_ADDON_BENIGN_LEVEL_RE = re.compile(
+    rf"^{_TS_PREFIX}(?:[A-Za-z0-9_.-]+:\s+)?"
+    r"(?:\[(?:info|notice|debug|trace)\]|"
+    r"(?:INFO|NOTICE|DEBUG|TRACE)\s*[:|-]|"
+    r"\b(?:INFO|NOTICE|DEBUG|TRACE)\b(?:\s|$))",
     re.IGNORECASE,
 )
+_ADDON_TEXT_LEVEL_RE = re.compile(
+    r"(?i:\[(CRITICAL|FATAL|CRIT|ERROR|ERR|WARNING|WARN|PANIC)\])|"
+    r"(?:^|\s)(CRITICAL|FATAL|ERROR|WARNING|PANIC)(?:\s*[:|-]|\s)|"
+    rf"^{_TS_PREFIX}(?i:(critical|fatal|crit|error|err|warning|warn|panic))\s*[:|-]"
+)
+_UNPREFIXED_ADDON_ERROR_RE = re.compile(
+    rf"^{_TS_PREFIX}"
+    r"(?:"
+    r"[A-Za-z0-9_./-][A-Za-z0-9_ ./-]{2,80}\s+failed:(?:\s+\S.*)?$|"
+    r"failed\s+to\s+[^:\n]+:\s*\S.*$|"
+    r"[A-Z][A-Za-z0-9]+(?:Error|Exception|Fault):\s+\S.*"
+    r")",
+    re.IGNORECASE,
+)
+_BENIGN_FAILED_ZERO_RE = re.compile(r"\bfailed\s*[:=]\s*0\b", re.IGNORECASE)
 _STACK_START_RE = re.compile(
     r"^(?:Traceback \(most recent call last\):|UnhandledPromiseRejection|panic:|fatal error:)",
     re.IGNORECASE,
@@ -121,13 +142,15 @@ def _resolve_domain_from_record(record: logging.LogRecord, message: str) -> str 
     if match:
         return match.group(1)
 
-    if logger_name.startswith(
+    if logger_name == "homeassistant.components" or logger_name.startswith(
         (
             "homeassistant.helpers.frame",
+            "homeassistant.helpers.entity",
             "homeassistant.setup",
             "homeassistant.config_entries",
             "homeassistant.loader",
-            "homeassistant.helpers.entity_platform",
+            "homeassistant.bootstrap",
+            "homeassistant.components.",
         )
     ):
         blame = _BLAME_INTEGRATION_RE.search(message)
@@ -417,6 +440,9 @@ def parse_addon_log_lines(
 
         _flush_pending()
 
+        if _ADDON_BENIGN_LEVEL_RE.match(stripped):
+            continue
+
         lvl_match = _ADDON_TEXT_LEVEL_RE.search(stripped)
         if lvl_match:
             token = next(g for g in lvl_match.groups() if g is not None).lower()
@@ -428,6 +454,17 @@ def parse_addon_log_lines(
                     "message": stripped,
                     "tb_lines": [],
                 }
+        elif (
+            _UNPREFIXED_ADDON_ERROR_RE.match(stripped)
+            and not _BENIGN_FAILED_ZERO_RE.search(stripped)
+            and logging.ERROR >= min_levelno
+        ):
+            pending_text = {
+                "levelno": logging.ERROR,
+                "severity": "ERROR",
+                "message": stripped,
+                "tb_lines": [],
+            }
         elif _STACK_START_RE.match(stripped) and logging.ERROR >= min_levelno:
             pending_text = {
                 "levelno": logging.ERROR,

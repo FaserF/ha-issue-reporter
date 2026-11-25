@@ -6,6 +6,7 @@ import base64
 import math
 import re
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -19,7 +20,9 @@ from .const import (
     CONF_CUSTOM_REDACTION_REGEXES,
     CONF_CUSTOM_REDACTIONS,
     CONF_FALLBACK_TOKEN,
+    CONF_FALLBACK_USER,
     CONF_GITHUB_TOKEN,
+    CONF_OWNER_ALLOWLIST,
     CONF_PRIVATE_KEY,
     CONF_STRICT_ENTROPY_GUARD,
     DEFAULT_STRICT_ENTROPY_GUARD,
@@ -27,268 +30,17 @@ from .const import (
     FINGERPRINT_PREFIX,
     LOGGER,
 )
-from .models import RedactionResult
-
-SENSITIVE_KEY_KEYWORDS: tuple[str, ...] = (
-    "password",
-    "passwd",
-    "pwd",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "key",
-    "auth",
-    "cookie",
-    "session",
-    "bearer",
-    "pin",
-    "passphrase",
-    "webhook",
-    "email",
-    "mail",
-    "phone",
-    "mobile",
-    "username",
-    "user",
-    "login",
-    "host",
-    "hostname",
-    "ip",
-    "url",
-    "uri",
-    "endpoint",
-    "dsn",
-    "cert",
-    "private",
-    "client_id",
-    "client_secret",
-    "iban",
-    "account",
-    "latitude",
-    "longitude",
-    "lat",
-    "lon",
+from .models import RedactionResult, TargetInfo
+from .redactor_rules import (
+    HIGH_ENTROPY_CANDIDATE_RE,
+    LEAK_CHECK_PATTERNS,
+    NON_SENSITIVE_KEYS,
+    PLACEHOLDER_TOKENS,
+    PUBLIC_GITHUB_REPO_URL_RE,
+    SAFE_HARVEST_STOPWORDS,
+    SCRUBBER_RULES,
+    SENSITIVE_KEY_KEYWORDS,
 )
-
-SAFE_HARVEST_STOPWORDS: frozenset[str] = frozenset(
-    {
-        "true",
-        "false",
-        "none",
-        "null",
-        "localhost",
-        "127.0.0.1",
-        "0.0.0.0",
-        "homeassistant",
-        "home-assistant",
-        "default",
-        "stable",
-        "warning",
-        "error",
-        "critical",
-        "debug",
-        "info",
-        "https",
-        "http",
-        "github.com",
-        "api.github.com",
-        "devices",
-        "device",
-        "problem",
-        "version",
-        "assistant",
-        "running",
-        "causing",
-        "information",
-        "installation",
-        "summary",
-        "severity",
-        "channel",
-        "logger",
-        "automated",
-        "integration",
-        "entities",
-        "entity",
-        "sensor",
-        "update",
-    }
-)
-
-PLACEHOLDER_TOKENS: frozenset[str] = frozenset(
-    {
-        "[REDACTED_SECRET]",
-        "[REDACTED_TOKEN]",
-        "[REDACTED_PRIVATE_KEY]",
-        "[REDACTED_CRED]",
-        "[REDACTED_HOST]",
-        "[REDACTED_EMAIL]",
-        "[REDACTED_PHONE]",
-        "[REDACTED_IBAN]",
-        "[REDACTED_IP]",
-        "[REDACTED_MAC]",
-        "[REDACTED_GPS]",
-        "[REDACTED_UUID]",
-        "[REDACTED_PATH]",
-        "[REDACTED_CUSTOM]",
-    }
-)
-
-SCRUBBER_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
-    (
-        "private_key",
-        re.compile(
-            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
-            re.MULTILINE,
-        ),
-        "[REDACTED_PRIVATE_KEY]",
-    ),
-    (
-        "github_token",
-        re.compile(
-            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,255}\b|\bgithub_pat_[A-Za-z0-9_]{20,255}\b"
-        ),
-        "[REDACTED_TOKEN]",
-    ),
-    (
-        "jwt",
-        re.compile(
-            r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
-        ),
-        "[REDACTED_TOKEN]",
-    ),
-    (
-        "known_api_token",
-        re.compile(
-            r"\b(?:sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|\d{8,10}:[A-Za-z0-9_-]{35})\b"
-        ),
-        "[REDACTED_TOKEN]",
-    ),
-    (
-        "auth_header",
-        re.compile(
-            r"((?:Authorization|X-Api-Key|X-Auth-Token|Cookie|Set-Cookie)\s*[:=]\s*(?:Bearer|Basic|Token)?\s*)([^\r\n;\"']+)",
-            re.IGNORECASE,
-        ),
-        r"\1[REDACTED_TOKEN]",
-    ),
-    (
-        "bearer_inline",
-        re.compile(r"(\bBearer\s+)([A-Za-z0-9._~+/=-]{8,})", re.IGNORECASE),
-        r"\1[REDACTED_TOKEN]",
-    ),
-    (
-        "url_credentials",
-        re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]*://)([^:@/\s]+):([^@/\s]+)@"),
-        r"\1[REDACTED_CRED]@",
-    ),
-    (
-        "kv_secret",
-        re.compile(
-            r"((?:password|passwd|pwd|secret|token|api[_-]?key|access_token|refresh_token|client_secret|pin|passphrase|session_id|session_token|cookie)\s*[:=]\s*['\"]?)([^\s'\",;}\]]+)",
-            re.IGNORECASE,
-        ),
-        r"\1[REDACTED_SECRET]",
-    ),
-    (
-        "private_domain",
-        re.compile(
-            r"\b[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9-]+)*\.(?:tailnet\.[a-zA-Z0-9.-]+|ts\.net|local|lan|home\.arpa|internal|fritz\.box)\b",
-            re.IGNORECASE,
-        ),
-        "[REDACTED_HOST]",
-    ),
-    (
-        "email_full",
-        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-        "[REDACTED_EMAIL]",
-    ),
-    (
-        "email_partial",
-        re.compile(r"(?<=[\s>:(])[A-Za-z0-9][A-Za-z0-9._%+-]{2,}@(?=\s|$|[,;)\]])"),
-        "[REDACTED_EMAIL]",
-    ),
-    (
-        "phone_e164",
-        re.compile(r"(?<!\w)\+[1-9]\d{1,2}[\s.-]?\d{2,4}[\s.-]?\d{3,10}\b"),
-        "[REDACTED_PHONE]",
-    ),
-    (
-        "iban",
-        re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b"),
-        "[REDACTED_IBAN]",
-    ),
-    (
-        "ipv4",
-        re.compile(
-            r"(?<![vV\d.])\b(?!0\.0\.0\.0\b)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b(?![\d.])"
-        ),
-        "[REDACTED_IP]",
-    ),
-    (
-        "ipv6",
-        re.compile(
-            r"(?<![:\w])(?:[0-9a-fA-F]{1,4}:){3,7}[0-9a-fA-F]{1,4}(?![:\w])|(?<![:\w])(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F:]{1,20}(?![:\w])"
-        ),
-        "[REDACTED_IP]",
-    ),
-    (
-        "mac",
-        re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
-        "[REDACTED_MAC]",
-    ),
-    (
-        "gps",
-        re.compile(
-            r"((?:lat(?:itude)?|lon(?:gitude)?)\s*[:=]\s*['\"]?)(-?\d{1,3}\.\d{4,})",
-            re.IGNORECASE,
-        ),
-        r"\1[REDACTED_GPS]",
-    ),
-    (
-        "uuid",
-        re.compile(
-            r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
-        ),
-        "[REDACTED_UUID]",
-    ),
-    (
-        "os_user_path",
-        re.compile(r"(?:/home/|/Users/|C:\\Users\\)([^/\\\s'\"]+)", re.IGNORECASE),
-        r"/home/[REDACTED_PATH]",
-    ),
-)
-
-LEAK_CHECK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("private_key_marker", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")),
-    (
-        "github_token",
-        re.compile(
-            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}"
-        ),
-    ),
-    (
-        "jwt",
-        re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
-    ),
-    (
-        "bearer",
-        re.compile(r"\bBearer\s+(?!\[REDACTED)[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
-    ),
-    ("url_cred", re.compile(r"://[^:@/\s\[]+:[^@/\s\]]+@")),
-    (
-        "tailnet_host",
-        re.compile(r"\.(?:tailnet\.[a-zA-Z0-9.-]+|ts\.net)\b", re.IGNORECASE),
-    ),
-    (
-        "private_ip",
-        re.compile(
-            r"(?<![vV\d.])\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b(?![\d.])"
-        ),
-    ),
-)
-
-_HIGH_ENTROPY_CANDIDATE_RE = re.compile(r"(?<![/\w.-])[A-Za-z0-9+/_=-]{28,}(?![\w./-])")
 
 
 def _shannon_entropy(value: str) -> float:
@@ -300,47 +52,70 @@ def _shannon_entropy(value: str) -> float:
     return -sum((c / length) * math.log2(c / length) for c in counts.values())
 
 
+def _is_non_sensitive_key(key: str) -> bool:
+    """Return True if dict key holds public metadata such as owner/repo/domain."""
+    lowered = key.lower()
+    if lowered in NON_SENSITIVE_KEYS:
+        return True
+    return lowered.endswith(
+        ("_repo", "_repository", "_repo_url", "_repository_url", "_owner")
+    )
+
+
 def _is_sensitive_key(key: str) -> bool:
     """Return True if dict key name suggests sensitive configuration data."""
-    lowered = key.lower()
-    if lowered in (
-        "version",
-        "ha_version",
-        "domain",
-        "name",
-        "title",
-        "slug",
-        "channel",
-        "github_user",
-        "fallback_user",
-        "owner",
-        "repo_owner",
-        "author",
-        "maintainer",
-    ):
+    if _is_non_sensitive_key(key):
         return False
+    lowered = key.lower()
     return any(word in lowered for word in SENSITIVE_KEY_KEYWORDS)
 
 
+def _is_public_github_url(val: str) -> bool:
+    """Return True if value is a credential-free public GitHub URL."""
+    if "://" not in val:
+        return False
+    after_scheme = val.split("://", 1)[1]
+    authority = after_scheme.split("/", 1)[0]
+    if "@" in authority:
+        return False
+    host = authority.split(":", 1)[0].lower()
+    return host in ("github.com", "www.github.com")
+
+
 def _walk_sensitive_values(
-    obj: Any, *, key_hint: str = "", force_all: bool = False
+    obj: Any, *, key_hint: str = "", force_all: bool = False, from_secrets: bool = False
 ) -> set[str]:
     """Recursively harvest sensitive string literals from dicts/lists."""
     found: set[str] = set()
     if isinstance(obj, dict):
         for k, v in obj.items():
             k_str = str(k)
-            child_force = force_all or _is_sensitive_key(k_str)
+            if not from_secrets and _is_non_sensitive_key(k_str):
+                child_force = False
+            else:
+                child_force = force_all or _is_sensitive_key(k_str)
             found.update(
-                _walk_sensitive_values(v, key_hint=k_str, force_all=child_force)
+                _walk_sensitive_values(
+                    v,
+                    key_hint=k_str,
+                    force_all=child_force,
+                    from_secrets=from_secrets,
+                )
             )
     elif isinstance(obj, list):
         for item in obj:
             found.update(
-                _walk_sensitive_values(item, key_hint=key_hint, force_all=force_all)
+                _walk_sensitive_values(
+                    item,
+                    key_hint=key_hint,
+                    force_all=force_all,
+                    from_secrets=from_secrets,
+                )
             )
     elif isinstance(obj, str) and force_all:
         val = obj.strip()
+        if not from_secrets and _is_public_github_url(val):
+            return found
         if len(val) >= 6 and val.lower() not in SAFE_HARVEST_STOPWORDS:
             if not re.fullmatch(r"\d{1,5}", val):
                 found.add(val)
@@ -369,7 +144,7 @@ def _read_secrets_yaml(path: Path) -> set[str]:
         return set()
     if not isinstance(raw, dict):
         return set()
-    return _walk_sensitive_values(raw, force_all=True)
+    return _walk_sensitive_values(raw, force_all=True, from_secrets=True)
 
 
 class PrivacyRedactor:
@@ -384,11 +159,33 @@ class PrivacyRedactor:
         self._custom_regexes: list[re.Pattern[str]] = []
         self._strict_entropy = DEFAULT_STRICT_ENTROPY_GUARD
         self._public_github_user = ""
+        self._public_github_users: set[str] = set()
+        self._public_github_repos: set[str] = {"faserf/ha-issue-reporter"}
+        self._target_public_values: set[str] = set()
         self.update_config(config)
 
     def update_config(self, config: dict[str, Any]) -> None:
         """Reload user custom redaction words, domains, regexes, and guard mode."""
         self._public_github_user = str(config.get("github_user") or "").strip()
+        public_users: set[str] = set()
+        for raw_user in (
+            self._public_github_user,
+            str(config.get(CONF_FALLBACK_USER) or "").strip(),
+        ):
+            if raw_user:
+                public_users.add(raw_user.lower())
+        raw_allowlist = config.get(CONF_OWNER_ALLOWLIST)
+        if isinstance(raw_allowlist, list):
+            public_users.update(
+                str(x).strip().lower() for x in raw_allowlist if str(x).strip()
+            )
+        elif isinstance(raw_allowlist, str):
+            public_users.update(
+                part.strip().lower()
+                for part in raw_allowlist.split(",")
+                if part.strip()
+            )
+        self._public_github_users = public_users
         self._strict_entropy = bool(
             config.get(CONF_STRICT_ENTROPY_GUARD, DEFAULT_STRICT_ENTROPY_GUARD)
         )
@@ -423,11 +220,62 @@ class PrivacyRedactor:
                     "Ignoring invalid custom redaction regex %r: %s", pat, err
                 )
 
+    def set_public_targets(
+        self,
+        targets: Iterable[TargetInfo],
+        *,
+        owner: str | None = None,
+    ) -> None:
+        """Register public GitHub owners, repos, and integration domains to ignore."""
+        public_vals: set[str] = set()
+        public_repos: set[str] = {"faserf/ha-issue-reporter"}
+        if owner and owner.strip():
+            clean_owner = owner.strip().lower()
+            public_vals.add(clean_owner)
+            self._public_github_users.add(clean_owner)
+        for target in targets:
+            for val in (
+                target.repo_owner,
+                target.repo_name,
+                target.full_repo,
+                target.repo_url,
+                target.short_name,
+                target.identifier,
+                target.name,
+            ):
+                if val and val.strip():
+                    public_vals.add(val.strip().lower())
+            if target.full_repo:
+                public_repos.add(target.full_repo.strip().lower())
+        self._target_public_values = public_vals
+        self._public_github_repos = public_repos
+
+    def _public_exclusion_set(self, extra_domains: Iterable[str] = ()) -> set[str]:
+        """Return lowercased public owner/repo/domain literals never treated as secrets."""
+        exclusions: set[str] = set(self._target_public_values)
+        exclusions.update(self._public_github_users)
+        if self._public_github_user:
+            exclusions.add(self._public_github_user.lower())
+        for repo in self._public_github_repos:
+            exclusions.add(repo)
+            exclusions.add(f"https://github.com/{repo}")
+            if "/" in repo:
+                owner, name = repo.split("/", 1)
+                exclusions.add(owner)
+                exclusions.add(name)
+        for dom in extra_domains:
+            if dom and dom.strip():
+                exclusions.add(dom.strip().lower())
+        return exclusions
+
     async def async_refresh_secrets(self, hass: HomeAssistant) -> int:
         """Layer 1: Harvest sensitive values from config entries, secrets.yaml, and add-ons."""
         collected: set[str] = set()
+        entry_domains: set[str] = set()
 
         for entry in hass.config_entries.async_entries():
+            if entry.domain:
+                entry_domains.add(entry.domain)
             if entry.domain == DOMAIN:
                 for key in (CONF_GITHUB_TOKEN, CONF_FALLBACK_TOKEN, CONF_PRIVATE_KEY):
                     val = entry.data.get(key)
@@ -463,8 +311,13 @@ class PrivacyRedactor:
                 except Exception as err:
                     LOGGER.debug("Supervisor secret harvest skipped: %s", err)
 
+        public_lower = self._public_exclusion_set(entry_domains)
+        filtered_collected = {
+            item for item in collected if item.lower() not in public_lower
+        }
+
         expanded: set[str] = set()
-        for item in collected:
+        for item in filtered_collected:
             expanded.add(item)
             url_enc = quote(item, safe="")
             if url_enc != item and len(url_enc) >= 8:
@@ -476,10 +329,9 @@ class PrivacyRedactor:
                 if len(b64) >= 12:
                     expanded.add(b64)
 
-        self._harvested_literals = expanded
-        # Never treat public GitHub owner handle from our own config as a secret
-        if self._public_github_user:
-            self._harvested_literals.discard(self._public_github_user)
+        self._harvested_literals = {
+            lit for lit in expanded if lit.lower() not in public_lower
+        }
         if self._harvested_literals:
             ordered = sorted(self._harvested_literals, key=len, reverse=True)
             self._harvested_pattern = re.compile(
@@ -534,6 +386,22 @@ class PrivacyRedactor:
             matched_categories=categories,
         )
 
+    def _strip_public_github_urls(self, text: str) -> str:
+        """Remove known public GitHub owner/repo URLs before harvested/entropy checks."""
+        public_owners = set(self._public_github_users)
+        if self._public_github_user:
+            public_owners.add(self._public_github_user.lower())
+
+        def _repl(match: re.Match[str]) -> str:
+            owner = match.group(1).lower()
+            repo = match.group(2).lower()
+            full_repo = f"{owner}/{repo}"
+            if full_repo in self._public_github_repos or owner in public_owners:
+                return " "
+            return match.group(0)
+
+        return PUBLIC_GITHUB_REPO_URL_RE.sub(_repl, text)
+
     def verify_no_leaks(self, title: str, body: str) -> tuple[bool, list[str]]:
         """Layer 4: Fail-closed verification ensuring zero secrets survive."""
         combined = f"{title}\n{body}"
@@ -545,11 +413,6 @@ class PrivacyRedactor:
         )
         reasons: list[str] = []
 
-        for lit in self._harvested_literals:
-            if lit and lit in without_marker:
-                reasons.append("harvested_secret_survived")
-                break
-
         for word in self._custom_literals:
             if word and word.lower() in without_marker.lower():
                 reasons.append("custom_redaction_survived")
@@ -559,11 +422,18 @@ class PrivacyRedactor:
             if pattern.search(without_marker):
                 reasons.append(f"pattern_survived:{name}")
 
+        public_scrubbed = self._strip_public_github_urls(without_marker)
+
+        for lit in self._harvested_literals:
+            if lit and lit in public_scrubbed:
+                reasons.append("harvested_secret_survived")
+                break
+
         if self._strict_entropy:
-            scrubbed = without_marker
+            scrubbed = public_scrubbed
             for ph in PLACEHOLDER_TOKENS:
                 scrubbed = scrubbed.replace(ph, " ")
-            for match in _HIGH_ENTROPY_CANDIDATE_RE.finditer(scrubbed):
+            for match in HIGH_ENTROPY_CANDIDATE_RE.finditer(scrubbed):
                 tok = match.group(0)
                 if re.fullmatch(r"[0-9a-fA-F]{32,64}", tok):
                     continue

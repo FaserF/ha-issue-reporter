@@ -33,7 +33,11 @@ async def async_handle_open_comment(
         coord.store.set_cooldown(fp)
         return "comment_skipped_dry_run"
 
-    if not coord.store.within_rate_limits(target.full_repo):
+    if not coord.store.within_rate_limits(
+        target.full_repo,
+        target_key=target.target_key,
+        is_monorepo=target.is_monorepo,
+    ):
         coord.stats.rate_limited_suppressed += 1
         return "rate_limited"
 
@@ -63,7 +67,7 @@ async def async_handle_open_comment(
         )
         coord.stats.comments_posted += 1
         coord.store.set_cooldown(fp)
-        coord.store.record_post_rate(target.full_repo)
+        coord.store.record_post_rate(target.full_repo, target_key=target.target_key)
         return "commented"
     except RepoNotAuthorizedError:
         return "not_authorized"
@@ -145,7 +149,7 @@ async def async_submit_issue(
     coord.stats.issues_created += 1
     coord.stats.last_issue_url = str(created.get("html_url") or "") or None
     coord.store.set_cooldown(fp)
-    coord.store.record_post_rate(rendered.repo)
+    coord.store.record_post_rate(rendered.repo, target_key=target.target_key)
     return "created"
 
 
@@ -157,8 +161,13 @@ async def async_flush_retry_queue(coord: IssueReporterCoordinator) -> None:
         ):
             coord.store.remove_retry(item.fingerprint)
             continue
+        target = coord.targets.get(item.target_key)
         if (
-            not coord.store.within_rate_limits(item.repo)
+            not coord.store.within_rate_limits(
+                item.repo,
+                target_key=item.target_key,
+                is_monorepo=bool(target and target.is_monorepo),
+            )
             or not coord.store.is_submission_spaced()
         ):
             break
@@ -182,7 +191,7 @@ async def async_flush_retry_queue(coord: IssueReporterCoordinator) -> None:
                 coord.stats.issues_created += 1
                 coord.stats.last_issue_url = str(created.get("html_url") or "") or None
             coord.store.set_cooldown(item.fingerprint)
-            coord.store.record_post_rate(item.repo)
+            coord.store.record_post_rate(item.repo, target_key=item.target_key)
             coord.store.remove_retry(item.fingerprint)
         except (GitHubRateLimitError, GitHubNetworkError) as err:
             reset_at = err.reset_at if isinstance(err, GitHubRateLimitError) else None

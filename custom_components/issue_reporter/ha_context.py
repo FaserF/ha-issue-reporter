@@ -39,6 +39,7 @@ def _format_device_model(dev: Any) -> str:
         return mdl
     return mfg
 
+
 _SAFE_CONNECTION_KEYS = (
     "connection_method",
     "connection_type",
@@ -119,9 +120,9 @@ def _extract_entry_metadata(
                 extras.setdefault(key, val)
 
         for key in ("num_departures", "limit", "max_departures"):
-            val = merged.get(key)
-            if isinstance(val, int) and not isinstance(val, bool):
-                extras.setdefault("num_departures", str(val))
+            raw_num = merged.get(key)
+            if isinstance(raw_num, int) and not isinstance(raw_num, bool):
+                extras.setdefault("num_departures", str(raw_num))
 
     return connections, variants, plans, extras
 
@@ -182,7 +183,12 @@ def collect_ha_target_context(
         # Fallback for MQTT/hybrid integrations (e.g. valetudo) whose devices
         # live under another config entry (e.g. mqtt) with manufacturer==domain
         if not matched_devs:
-            for dev in dev_reg.devices.values():
+            all_devs = (
+                dev_reg.devices.values()
+                if isinstance(dev_reg.devices, Mapping)
+                else dev_reg.devices
+            )
+            for dev in all_devs:
                 if _is_generic_device(dev):
                     continue
                 mfg_low = (dev.manufacturer or "").strip().lower()
@@ -259,7 +265,8 @@ def collect_ha_target_context(
             elif any(k in eid_low for k in ("_plan", "_tier")):
                 plans.append(sval)
             elif any(
-                k in eid_low for k in ("connection_type", "connection_method", "setup_type")
+                k in eid_low
+                for k in ("connection_type", "connection_method", "setup_type")
             ):
                 connections.append(sval)
     except Exception as err:
