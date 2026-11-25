@@ -39,6 +39,8 @@ from .const import (
     CONF_APP_ID,
     CONF_AUTH_METHOD,
     CONF_CUSTOM_REDACTIONS,
+    CONF_DRAFT_NOTIFICATION_MODE,
+    CONF_DRAFT_NOTIFY_SERVICE,
     CONF_DRY_RUN,
     CONF_FALLBACK_AUTH_METHOD,
     CONF_FALLBACK_TOKEN,
@@ -52,10 +54,14 @@ from .const import (
     CONF_OWNER_FILTER_MODE,
     CONF_PRIVATE_KEY,
     CONF_REQUIRE_APPROVAL,
+    DEFAULT_DRAFT_NOTIFICATION_MODE,
+    DEFAULT_DRAFT_NOTIFY_SERVICE,
     DEFAULT_MIN_SEVERITY,
     DEFAULT_OAUTH_CLIENT_ID,
     DEFAULT_REQUIRE_APPROVAL,
     DOMAIN,
+    DRAFT_ALERT_NOTIFICATION,
+    DRAFT_ALERT_REPAIR,
     OWNER_FILTER_CUSTOM,
     OWNER_FILTER_MANUAL,
     OWNER_FILTER_SELF,
@@ -355,6 +361,15 @@ class IssueReporterConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_REQUIRE_APPROVAL: bool(
                     user_input.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)
                 ),
+                CONF_DRAFT_NOTIFICATION_MODE: str(
+                    user_input.get(
+                        CONF_DRAFT_NOTIFICATION_MODE,
+                        DEFAULT_DRAFT_NOTIFICATION_MODE,
+                    )
+                ),
+                CONF_DRAFT_NOTIFY_SERVICE: str(
+                    user_input.get(CONF_DRAFT_NOTIFY_SERVICE) or ""
+                ).strip(),
                 CONF_CUSTOM_REDACTIONS: split_csv_or_lines(
                     user_input.get(CONF_CUSTOM_REDACTIONS)
                 ),
@@ -407,6 +422,28 @@ class IssueReporterConfigFlow(ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_REQUIRE_APPROVAL, default=DEFAULT_REQUIRE_APPROVAL
                     ): bool,
+                    vol.Required(
+                        CONF_DRAFT_NOTIFICATION_MODE,
+                        default=DEFAULT_DRAFT_NOTIFICATION_MODE,
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                SelectOptionDict(
+                                    value=DRAFT_ALERT_REPAIR,
+                                    label="Home Assistant Repair (default)",
+                                ),
+                                SelectOptionDict(
+                                    value=DRAFT_ALERT_NOTIFICATION,
+                                    label="Interactive Notification",
+                                ),
+                            ],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_DRAFT_NOTIFY_SERVICE,
+                        default=DEFAULT_DRAFT_NOTIFY_SERVICE,
+                    ): str,
                     vol.Optional(CONF_CUSTOM_REDACTIONS, default=""): str,
                 }
             ),

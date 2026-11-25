@@ -41,6 +41,8 @@ CONF_OWNER_FILTER_MODE: Final = "owner_filter_mode"
 CONF_OWNER_ALLOWLIST: Final = "owner_allowlist"
 CONF_DRY_RUN: Final = "dry_run"
 CONF_REQUIRE_APPROVAL: Final = "require_approval"
+CONF_DRAFT_NOTIFICATION_MODE: Final = "draft_notification_mode"
+CONF_DRAFT_NOTIFY_SERVICE: Final = "draft_notify_service"
 CONF_MIN_SEVERITY: Final = "min_severity"
 CONF_CUSTOM_REDACTIONS: Final = "custom_redactions"
 CONF_CUSTOM_REDACTION_REGEXES: Final = "custom_redaction_regexes"
@@ -50,6 +52,14 @@ CONF_STRICT_ENTROPY_GUARD: Final = "strict_entropy_guard"
 MODE_AUTO: Final = "auto"
 MODE_APPROVAL: Final = "approval"
 MODE_DRY_RUN: Final = "dry_run"
+
+# Pending draft alert channels
+DRAFT_ALERT_REPAIR: Final = "repair"
+DRAFT_ALERT_NOTIFICATION: Final = "notification"
+DRAFT_ACTION_URL_PATH: Final = "/api/issue_reporter/draft_action"
+NOTIFICATION_ID_PREFIX: Final = "issue_reporter_draft_"
+MOBILE_ACTION_APPROVE_PREFIX: Final = "ISSUE_REPORTER_APPROVE_"
+MOBILE_ACTION_DISMISS_PREFIX: Final = "ISSUE_REPORTER_DISMISS_"
 
 # Target kinds
 TARGET_INTEGRATION: Final = "integration"
@@ -90,6 +100,8 @@ CONF_TARGET_OVERRIDES: Final = "target_overrides"
 
 DEFAULT_DRY_RUN: Final = False
 DEFAULT_REQUIRE_APPROVAL: Final = False
+DEFAULT_DRAFT_NOTIFICATION_MODE: Final = DRAFT_ALERT_REPAIR
+DEFAULT_DRAFT_NOTIFY_SERVICE: Final = ""
 DEFAULT_MIN_SEVERITY: Final = SEVERITY_ERROR
 DEFAULT_MIN_OCCURRENCES_ERROR: Final = 1
 DEFAULT_MIN_OCCURRENCES_WARNING: Final = 3

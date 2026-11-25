@@ -28,6 +28,8 @@ from .const import (
     CONF_CUSTOM_IGNORE_PATTERNS,
     CONF_CUSTOM_REDACTION_REGEXES,
     CONF_CUSTOM_REDACTIONS,
+    CONF_DRAFT_NOTIFICATION_MODE,
+    CONF_DRAFT_NOTIFY_SERVICE,
     CONF_DRY_RUN,
     CONF_FALLBACK_AUTH_METHOD,
     CONF_FALLBACK_TOKEN,
@@ -51,6 +53,7 @@ from .const import (
     CONF_SKIP_OUTDATED,
     CONF_STRICT_ENTROPY_GUARD,
     CONF_TARGET_OVERRIDES,
+    DEFAULT_DRAFT_NOTIFICATION_MODE,
     DEFAULT_IGNORE_AUTH_ERRORS,
     DEFAULT_IGNORE_LIFECYCLE_ERRORS,
     DEFAULT_IGNORE_NETWORK_ERRORS,
@@ -113,6 +116,15 @@ class IssueReporterOptionsFlow(OptionsFlow):
                     ),
                     CONF_DRY_RUN: bool(user_input[CONF_DRY_RUN]),
                     CONF_REQUIRE_APPROVAL: bool(user_input[CONF_REQUIRE_APPROVAL]),
+                    CONF_DRAFT_NOTIFICATION_MODE: str(
+                        user_input.get(
+                            CONF_DRAFT_NOTIFICATION_MODE,
+                            DEFAULT_DRAFT_NOTIFICATION_MODE,
+                        )
+                    ),
+                    CONF_DRAFT_NOTIFY_SERVICE: str(
+                        user_input.get(CONF_DRAFT_NOTIFY_SERVICE) or ""
+                    ).strip(),
                     CONF_MIN_SEVERITY: user_input[CONF_MIN_SEVERITY],
                     CONF_MIN_OCCURRENCES_ERROR: int(
                         user_input[CONF_MIN_OCCURRENCES_ERROR]

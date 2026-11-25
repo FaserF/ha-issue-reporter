@@ -10,6 +10,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 from .coordinator import IssueReporterCoordinator
+from .notifications import async_register_draft_action_handlers
 from .services import async_register_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -21,6 +22,7 @@ type IssueReporterConfigEntry = ConfigEntry[IssueReporterCoordinator]
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up global Issue Reporter services."""
     async_register_services(hass)
+    async_register_draft_action_handlers(hass)
     return True
 
 

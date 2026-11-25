@@ -69,9 +69,10 @@ from .models import LogEvent, PendingDraft, ReporterStats, TargetInfo
 from .preview import async_render_preview, build_coordinator_snapshot
 from .redactor import PrivacyRedactor
 from .repairs import (
-    async_clear_draft_repair,
-    async_raise_draft_repair,
+    async_clear_draft_alert,
+    async_raise_draft_alert,
     async_raise_leak_guard_repair,
+    async_sync_draft_alerts,
 )
 from .state_store import ReporterStateStore
 from .submission import (
@@ -145,9 +146,14 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Expose reporter metrics from persistent store."""
         return self.store.stats
 
+    async def _async_sync_draft_alerts(self) -> None:
+        """Reconcile active Repair/notification alerts with persisted drafts."""
+        await async_sync_draft_alerts(self.hass, self.pending_drafts, self.config)
+
     async def async_setup(self) -> None:
         """Load persisted state, validate auth, discover targets, and start capture."""
         await self.store.async_load()
+        await self._async_sync_draft_alerts()
         try:
             await self.auth.async_initialize()
         except GitHubReauthRequiredError as err:
@@ -496,13 +502,11 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             self.store.store_draft(draft)
             if effective_mode == MODE_APPROVAL:
-                async_raise_draft_repair(
+                await async_raise_draft_alert(
                     self.hass,
-                    draft.draft_id,
-                    draft.repo,
-                    draft.title,
-                    draft.target_name,
-                    sanitized_msg,
+                    draft,
+                    config=self.config,
+                    excerpt=sanitized_msg,
                 )
             self.store.set_cooldown(fp)
             return (
@@ -530,7 +534,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             owner, repo, draft.title, draft.body, labels=draft.labels
         )
         self.pending_drafts.pop(draft_id, None)
-        async_clear_draft_repair(self.hass, draft_id)
+        await async_clear_draft_alert(self.hass, draft_id, config=self.config)
         self.stats.issues_created += 1
         self.stats.last_issue_url = str(created.get("html_url") or "") or None
         self.store.set_cooldown(draft.fingerprint)
@@ -542,7 +546,7 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_dismiss_draft(self, draft_id: str) -> None:
         """Dismiss a draft, record its fingerprint, and clear its Repair."""
         draft = self.pending_drafts.pop(draft_id, None)
-        async_clear_draft_repair(self.hass, draft_id)
+        await async_clear_draft_alert(self.hass, draft_id, config=self.config)
         if draft is not None:
             self.store.dismissed_fps.add(draft.fingerprint)
             self.store.set_cooldown(draft.fingerprint)

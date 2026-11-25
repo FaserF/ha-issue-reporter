@@ -52,6 +52,8 @@
           "min_severity": "Default Minimum Log Severity",
           "dry_run": "Enable Global Dry-Run Mode (preview drafts without posting)",
           "require_approval": "Require Manual Approval Before Creating Issues",
+          "draft_notification_mode": "Pending Draft Approval Alert Type",
+          "draft_notify_service": "Optional Push Notify Service (e.g. notify.mobile_app_phone)",
           "custom_redactions": "Extra Private Domains / Words to Redact (comma-separated)"
         }
       },
@@ -98,6 +100,8 @@
           "owner_allowlist": "Allowed GitHub Owners (comma-separated)",
           "dry_run": "Global Dry-Run Mode",
           "require_approval": "Require Manual Approval Before Creating Issues",
+          "draft_notification_mode": "Pending Draft Approval Alert Type",
+          "draft_notify_service": "Optional Push Notify Service (e.g. notify.mobile_app_phone)",
           "min_severity": "Default Minimum Severity",
           "min_occurrences_error": "Minimum ERROR occurrences before reporting",
           "min_occurrences_warning": "Minimum WARNING occurrences before reporting",
@@ -207,7 +211,21 @@
   "issues": {
     "pending_draft_approval": {
       "title": "Review GitHub issue draft for {target}",
-      "description": "Issue Reporter prepared a sanitized issue for **{repo}**:\n\n`{title}`\n\nExcerpt:\n```\n{excerpt}\n```"
+      "description": "Issue Reporter prepared a sanitized issue for **{repo}**:\n\n`{title}`\n\nExcerpt:\n```\n{excerpt}\n```",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Review GitHub issue draft",
+            "description": "Issue Reporter prepared a sanitized issue for **{repo}** (`{target}`):\n\n`{title}`\n\n```\n{excerpt}\n```",
+            "data": {
+              "action": "Action"
+            }
+          }
+        },
+        "abort": {
+          "action_failed": "Draft action failed. Check Home Assistant logs for details."
+        }
+      }
     },
     "leak_guard_blocked": {
       "title": "Pre-flight Leak Guard blocked report for {target}",

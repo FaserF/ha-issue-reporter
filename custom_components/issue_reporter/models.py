@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -139,6 +140,7 @@ class PendingDraft:
     occurrences: int
     template_used: str = "default"
     dry_run_only: bool = False
+    action_token: str = field(default_factory=lambda: secrets.token_urlsafe(24))
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize draft for persistent storage."""
@@ -158,6 +160,7 @@ class PendingDraft:
             "occurrences": self.occurrences,
             "template_used": self.template_used,
             "dry_run_only": self.dry_run_only,
+            "action_token": self.action_token,
         }
 
     @classmethod
@@ -179,6 +182,7 @@ class PendingDraft:
             occurrences=int(data.get("occurrences", 1)),
             template_used=str(data.get("template_used", "default")),
             dry_run_only=bool(data.get("dry_run_only", False)),
+            action_token=str(data.get("action_token") or secrets.token_urlsafe(24)),
         )
 
 

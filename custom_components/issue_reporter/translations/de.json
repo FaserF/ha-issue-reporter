@@ -52,6 +52,8 @@
           "min_severity": "Standard-Mindestschweregrad",
           "dry_run": "Globalen Dry-Run-Modus aktivieren (nur Entwürfe)",
           "require_approval": "Manuelle Freigabe vor Issue-Erstellung erforderlich",
+          "draft_notification_mode": "Benachrichtigungsart für ausstehende Entwürfe",
+          "draft_notify_service": "Optionaler Push-Notify-Dienst (z. B. notify.mobile_app_handy)",
           "custom_redactions": "Zusätzliche private Domains / Wörter maskieren (kommagetrennt)"
         }
       },
@@ -98,6 +100,8 @@
           "owner_allowlist": "Erlaubte GitHub-Owner (kommagetrennt)",
           "dry_run": "Globaler Dry-Run-Modus",
           "require_approval": "Manuelle Freigabe vor Issue-Erstellung erforderlich",
+          "draft_notification_mode": "Benachrichtigungsart für ausstehende Entwürfe",
+          "draft_notify_service": "Optionaler Push-Notify-Dienst (z. B. notify.mobile_app_handy)",
           "min_severity": "Standard-Mindestschweregrad",
           "min_occurrences_error": "Mindestanzahl ERROR vor Meldung",
           "min_occurrences_warning": "Mindestanzahl WARNING vor Meldung",
@@ -199,7 +203,21 @@
   "issues": {
     "pending_draft_approval": {
       "title": "GitHub-Issue-Entwurf für {target} prüfen",
-      "description": "Issue Reporter hat einen bereinigten Issue-Entwurf für **{repo}** vorbereitet:\n\n`{title}`\n\nAuszug:\n```\n{excerpt}\n```"
+      "description": "Issue Reporter hat einen bereinigten Issue-Entwurf für **{repo}** vorbereitet:\n\n`{title}`\n\nAuszug:\n```\n{excerpt}\n```",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "GitHub-Issue-Entwurf prüfen",
+            "description": "Issue Reporter hat einen bereinigten Issue-Entwurf für **{repo}** (`{target}`) vorbereitet:\n\n`{title}`\n\n```\n{excerpt}\n```",
+            "data": {
+              "action": "Aktion"
+            }
+          }
+        },
+        "abort": {
+          "action_failed": "Entwurfs-Aktion fehlgeschlagen. Details im Home-Assistant-Log prüfen."
+        }
+      }
     },
     "leak_guard_blocked": {
       "title": "Pre-Flight Leak Guard hat Bericht für {target} blockiert",

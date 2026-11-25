@@ -10,7 +10,20 @@ from homeassistant.components.repairs import ConfirmRepairFlow, RepairsFlow
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 
-from .const import DOMAIN, LOGGER
+from .const import (
+    CONF_DRAFT_NOTIFICATION_MODE,
+    CONF_DRAFT_NOTIFY_SERVICE,
+    DEFAULT_DRAFT_NOTIFICATION_MODE,
+    DEFAULT_DRAFT_NOTIFY_SERVICE,
+    DOMAIN,
+    DRAFT_ALERT_NOTIFICATION,
+    LOGGER,
+)
+from .models import PendingDraft
+from .notifications import (
+    async_clear_draft_notification,
+    async_raise_draft_notification,
+)
 
 
 def async_raise_draft_repair(
@@ -74,6 +87,87 @@ def async_clear_draft_repair(hass: HomeAssistant, draft_id: str) -> None:
     ir.async_delete_issue(hass, DOMAIN, f"draft_{draft_id}")
 
 
+async def async_raise_draft_alert(
+    hass: HomeAssistant,
+    draft: PendingDraft,
+    *,
+    config: dict[str, Any] | None = None,
+    alert_mode: str | None = None,
+    notify_service: str | None = None,
+    excerpt: str = "",
+) -> None:
+    """Create configured alert (repair or interactive notification) for a draft."""
+    cfg = config or {}
+    mode = alert_mode or str(
+        cfg.get(CONF_DRAFT_NOTIFICATION_MODE, DEFAULT_DRAFT_NOTIFICATION_MODE)
+    )
+    notify = (
+        notify_service
+        if notify_service is not None
+        else str(cfg.get(CONF_DRAFT_NOTIFY_SERVICE, DEFAULT_DRAFT_NOTIFY_SERVICE) or "")
+    ).strip()
+    preview = excerpt or draft.body[:400]
+    if mode == DRAFT_ALERT_NOTIFICATION:
+        async_clear_draft_repair(hass, draft.draft_id)
+        await async_raise_draft_notification(
+            hass,
+            draft,
+            excerpt=preview,
+            notify_service=notify,
+        )
+        return
+
+    await async_clear_draft_notification(hass, draft.draft_id, notify_service=notify)
+    async_raise_draft_repair(
+        hass,
+        draft.draft_id,
+        draft.repo,
+        draft.title,
+        draft.target_name,
+        preview,
+    )
+
+
+async def async_clear_draft_alert(
+    hass: HomeAssistant,
+    draft_id: str,
+    *,
+    config: dict[str, Any] | None = None,
+    notify_service: str | None = None,
+) -> None:
+    """Clear both Repair and notification alerts for an approved/dismissed draft."""
+    cfg = config or {}
+    notify = (
+        notify_service
+        if notify_service is not None
+        else str(cfg.get(CONF_DRAFT_NOTIFY_SERVICE, DEFAULT_DRAFT_NOTIFY_SERVICE) or "")
+    ).strip()
+    async_clear_draft_repair(hass, draft_id)
+    await async_clear_draft_notification(hass, draft_id, notify_service=notify)
+
+
+async def async_sync_draft_alerts(
+    hass: HomeAssistant,
+    pending_drafts: dict[str, PendingDraft],
+    config: dict[str, Any],
+) -> None:
+    """Reconcile active Repair/notification alerts with persisted pending drafts."""
+    alert_mode = str(
+        config.get(CONF_DRAFT_NOTIFICATION_MODE, DEFAULT_DRAFT_NOTIFICATION_MODE)
+    )
+    notify_service = str(
+        config.get(CONF_DRAFT_NOTIFY_SERVICE, DEFAULT_DRAFT_NOTIFY_SERVICE) or ""
+    ).strip()
+    for draft in pending_drafts.values():
+        if not draft.dry_run_only:
+            await async_raise_draft_alert(
+                hass,
+                draft,
+                alert_mode=alert_mode,
+                notify_service=notify_service,
+            )
+
+
 class PendingDraftRepairFlow(RepairsFlow):
     """Repair flow allowing 1-click publish or dismissal of a queued draft."""
 
@@ -118,6 +212,9 @@ class PendingDraftRepairFlow(RepairsFlow):
                 }
             ),
             description_placeholders={
+                "target": str(
+                    self._data.get("target_name") or self._data.get("repo", "")
+                ),
                 "repo": str(self._data.get("repo", "")),
                 "title": str(self._data.get("title", "")),
                 "excerpt": str(self._data.get("excerpt", "")),

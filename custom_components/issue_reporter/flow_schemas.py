@@ -19,6 +19,8 @@ from .const import (
     CONF_ALLOW_DEV_EDGE,
     CONF_COMMENT_ON_NEWER_VERSION,
     CONF_COOLDOWN_HOURS,
+    CONF_DRAFT_NOTIFICATION_MODE,
+    CONF_DRAFT_NOTIFY_SERVICE,
     CONF_DRY_RUN,
     CONF_INCLUDE_CORE_ADDONS,
     CONF_MAX_ISSUES_PER_HOUR,
@@ -35,6 +37,8 @@ from .const import (
     DEFAULT_ALLOW_DEV_EDGE,
     DEFAULT_COMMENT_ON_NEWER_VERSION,
     DEFAULT_COOLDOWN_HOURS,
+    DEFAULT_DRAFT_NOTIFICATION_MODE,
+    DEFAULT_DRAFT_NOTIFY_SERVICE,
     DEFAULT_DRY_RUN,
     DEFAULT_INCLUDE_CORE_ADDONS,
     DEFAULT_MAX_ISSUES_PER_HOUR,
@@ -45,6 +49,8 @@ from .const import (
     DEFAULT_OCCURRENCE_WINDOW_MINUTES,
     DEFAULT_REQUIRE_APPROVAL,
     DEFAULT_SKIP_OUTDATED,
+    DRAFT_ALERT_NOTIFICATION,
+    DRAFT_ALERT_REPAIR,
     MODE_APPROVAL,
     MODE_AUTO,
     MODE_DRY_RUN,
@@ -94,6 +100,36 @@ def build_general_schema(cfg: dict[str, Any]) -> vol.Schema:
                 CONF_REQUIRE_APPROVAL,
                 default=bool(cfg.get(CONF_REQUIRE_APPROVAL, DEFAULT_REQUIRE_APPROVAL)),
             ): bool,
+            vol.Required(
+                CONF_DRAFT_NOTIFICATION_MODE,
+                default=str(
+                    cfg.get(
+                        CONF_DRAFT_NOTIFICATION_MODE,
+                        DEFAULT_DRAFT_NOTIFICATION_MODE,
+                    )
+                ),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(
+                            value=DRAFT_ALERT_REPAIR,
+                            label="Home Assistant Repair (default)",
+                        ),
+                        SelectOptionDict(
+                            value=DRAFT_ALERT_NOTIFICATION,
+                            label="Interactive Notification",
+                        ),
+                    ],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_DRAFT_NOTIFY_SERVICE,
+                default=str(
+                    cfg.get(CONF_DRAFT_NOTIFY_SERVICE, DEFAULT_DRAFT_NOTIFY_SERVICE)
+                    or ""
+                ),
+            ): str,
             vol.Required(
                 CONF_MIN_SEVERITY,
                 default=cfg.get(CONF_MIN_SEVERITY, DEFAULT_MIN_SEVERITY),
@@ -195,9 +231,7 @@ def build_target_schema(target: TargetInfo, current_ov: TargetOverride) -> vol.S
                 SelectSelectorConfig(
                     options=[
                         SelectOptionDict(value=MODE_AUTO, label="Auto-Create"),
-                        SelectOptionDict(
-                            value=MODE_APPROVAL, label="Approval Queue (HA Repair)"
-                        ),
+                        SelectOptionDict(value=MODE_APPROVAL, label="Approval Queue"),
                         SelectOptionDict(
                             value=MODE_DRY_RUN, label="Dry-Run / Log Only"
                         ),
