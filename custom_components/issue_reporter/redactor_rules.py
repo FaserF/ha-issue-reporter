@@ -87,6 +87,14 @@ SAFE_HARVEST_STOPWORDS: frozenset[str] = frozenset(
         "entity",
         "sensor",
         "update",
+        "sqlite",
+        "android",
+        "iphone",
+        "tablet",
+        "mobile",
+        "custom",
+        "addons",
+        "latest",
     }
 )
 

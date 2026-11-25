@@ -470,6 +470,9 @@ class IssueReporterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             regression_of=dup.issue_number if dup.action == "regression_new" else None,
         )
 
+        rendered.title, rendered.body = self.redactor.redact_rendered_issue(
+            rendered.title, rendered.body
+        )
         passed, reasons = self.redactor.verify_no_leaks(rendered.title, rendered.body)
         if not passed:
             self.stats.leak_guard_blocks += 1

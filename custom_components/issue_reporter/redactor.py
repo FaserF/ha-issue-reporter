@@ -386,6 +386,26 @@ class PrivacyRedactor:
             matched_categories=categories,
         )
 
+    def redact_rendered_issue(self, title: str, body: str) -> tuple[str, str]:
+        """Sanitize rendered issue title and body while preserving fingerprint markers."""
+        clean_title = self.redact(title).text
+        if not body:
+            return clean_title, body
+
+        marker_re = re.compile(rf"<!--\s*{re.escape(FINGERPRINT_PREFIX)}[^\n]*-->")
+        preserved: list[str] = []
+
+        def _stash(match: re.Match[str]) -> str:
+            idx = len(preserved)
+            preserved.append(match.group(0))
+            return f"__HA_IR_MARKER_{idx}__"
+
+        stashed = marker_re.sub(_stash, body)
+        clean_body = self.redact(stashed).text
+        for idx, original in enumerate(preserved):
+            clean_body = clean_body.replace(f"__HA_IR_MARKER_{idx}__", original)
+        return clean_title, clean_body
+
     def _strip_public_github_urls(self, text: str) -> str:
         """Remove known public GitHub owner/repo URLs before harvested/entropy checks."""
         public_owners = set(self._public_github_users)
@@ -413,8 +433,17 @@ class PrivacyRedactor:
         )
         reasons: list[str] = []
 
+        public_scrubbed = self._strip_public_github_urls(without_marker)
+        scrubbed_no_ph = public_scrubbed
+        for ph in PLACEHOLDER_TOKENS:
+            scrubbed_no_ph = scrubbed_no_ph.replace(ph, " ")
+
         for word in self._custom_literals:
-            if word and word.lower() in without_marker.lower():
+            if (
+                word
+                and word.lower() not in self._target_public_values
+                and word.lower() in scrubbed_no_ph.lower()
+            ):
                 reasons.append("custom_redaction_survived")
                 break
 
@@ -422,17 +451,17 @@ class PrivacyRedactor:
             if pattern.search(without_marker):
                 reasons.append(f"pattern_survived:{name}")
 
-        public_scrubbed = self._strip_public_github_urls(without_marker)
-
         for lit in self._harvested_literals:
-            if lit and lit in public_scrubbed:
+            if (
+                lit
+                and lit.lower() not in self._target_public_values
+                and lit in public_scrubbed
+            ):
                 reasons.append("harvested_secret_survived")
                 break
 
         if self._strict_entropy:
-            scrubbed = public_scrubbed
-            for ph in PLACEHOLDER_TOKENS:
-                scrubbed = scrubbed.replace(ph, " ")
+            scrubbed = scrubbed_no_ph
             for match in HIGH_ENTROPY_CANDIDATE_RE.finditer(scrubbed):
                 tok = match.group(0)
                 if re.fullmatch(r"[0-9a-fA-F]{32,64}", tok):

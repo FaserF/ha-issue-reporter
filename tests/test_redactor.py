@@ -228,3 +228,16 @@ async def test_public_owner_repo_not_harvested_and_template_urls_allowed(
     )
     assert ok_pk is False
     assert "pattern_survived:private_key_marker" in reasons_pk
+
+    # redact_rendered_issue must scrub metadata leaks while preserving the HTML marker
+    r2 = PrivacyRedactor({CONF_CUSTOM_REDACTIONS: ["my-secret-town"]})
+    raw_title, raw_body = r2.redact_rendered_issue(
+        "[Bug]: Failure in my-secret-town",
+        "Station my-secret-town unreachable\n<!-- ha-issue-reporter:fp=deadbeef12345678 -->",
+    )
+    assert "my-secret-town" not in raw_title
+    assert "my-secret-town" not in raw_body
+    assert "<!-- ha-issue-reporter:fp=deadbeef12345678 -->" in raw_body
+    ok_clean, reasons_clean = r2.verify_no_leaks(raw_title, raw_body)
+    assert ok_clean is True
+    assert reasons_clean == []
