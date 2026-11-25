@@ -193,6 +193,7 @@ async def test_resolve_domain_extended_core_loggers() -> None:
             "integration:aegisbot": logging.WARNING,
             "integration:openwrt": logging.ERROR,
             "integration:mcphub": logging.ERROR,
+            "integration:kadermanager": logging.WARNING,
         }
     )
 
@@ -224,15 +225,25 @@ async def test_resolve_domain_extended_core_loggers() -> None:
             None,
             None,
         ),
+        logging.LogRecord(
+            "homeassistant.config_entries",
+            logging.WARNING,
+            __file__,
+            40,
+            "The deprecated constant CONN_CLASS_CLOUD_POLL was used from kadermanager. It will be removed in HA Core 2027.5.0. Please report it to the author of the 'kadermanager' custom integration",
+            None,
+            None,
+        ),
     ]
     for rec in records:
         handler.emit(rec)
 
-    assert len(handler.queue) == 3
+    assert len(handler.queue) == 4
     assert [ev.target_key for ev in handler.queue] == [
         "integration:openwrt",
         "integration:mcphub",
         "integration:aegisbot",
+        "integration:kadermanager",
     ]
 
 

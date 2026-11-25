@@ -35,7 +35,10 @@ IN_REPORTER_PIPELINE: ContextVar[bool] = ContextVar(
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CUSTOM_LOGGER_RE = re.compile(r"^custom_components\.([a-z0-9_]+)(?:\.|$)")
 _BLAME_INTEGRATION_RE = re.compile(
-    r"custom integration '([a-z0-9_]+)'|custom_components\.([a-z0-9_]+)"
+    r"custom integration '([a-z0-9_]+)'|"
+    r"author of the '([a-z0-9_]+)' custom integration|"
+    r"was used from ([a-z0-9_]+)|"
+    r"custom_components\.([a-z0-9_]+)"
 )
 _CORE_LOG_LINE_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)\s+"
@@ -155,7 +158,7 @@ def _resolve_domain_from_record(record: logging.LogRecord, message: str) -> str 
     ):
         blame = _BLAME_INTEGRATION_RE.search(message)
         if blame:
-            return blame.group(1) or blame.group(2)
+            return blame.group(1) or blame.group(2) or blame.group(3) or blame.group(4)
 
     if record.levelno >= logging.ERROR and record.exc_info and record.exc_info[2]:
         tb_obj = record.exc_info[2]
@@ -296,7 +299,12 @@ def parse_core_log_lines(
             if not domain:
                 blame = _BLAME_INTEGRATION_RE.search(msg)
                 if blame:
-                    domain = blame.group(1) or blame.group(2)
+                    domain = (
+                        blame.group(1)
+                        or blame.group(2)
+                        or blame.group(3)
+                        or blame.group(4)
+                    )
             if not domain:
                 continue
             target_key = f"{TARGET_INTEGRATION}:{domain}"
