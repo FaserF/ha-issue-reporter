@@ -203,7 +203,6 @@
   "issues": {
     "pending_draft_approval": {
       "title": "Review GitHub issue draft for {target}",
-      "description": "Issue Reporter prepared a sanitized issue for **{repo}**:\n\n`{title}`\n\nExcerpt:\n```\n{excerpt}\n```",
       "fix_flow": {
         "step": {
           "init": {

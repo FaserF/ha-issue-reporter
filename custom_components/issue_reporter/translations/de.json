@@ -203,7 +203,6 @@
   "issues": {
     "pending_draft_approval": {
       "title": "GitHub-Issue-Entwurf für {target} prüfen",
-      "description": "Issue Reporter hat einen bereinigten Issue-Entwurf für **{repo}** vorbereitet:\n\n`{title}`\n\nAuszug:\n```\n{excerpt}\n```",
       "fix_flow": {
         "step": {
           "init": {
